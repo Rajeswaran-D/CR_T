@@ -1,0 +1,13 @@
+# Build context hygiene: keep host artifacts and secrets OUT of image layers.
+# `.env*` is deliberately excluded — Vite vars arrive via Dockerfile ARGs
+# (build args in compose), so the live DB password in .env never enters the
+# builder layer and a clean clone builds with correct org settings.
+node_modules
+dist
+.git
+.github
+.env
+.env.production
+*.log
+.commandcode
+.vscode

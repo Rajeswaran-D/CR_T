@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# CFT Tracker — ORG / CLOUD PRODUCTION overlay
+# Use when the organization provides the server + managed Cloud MySQL.
+# Local dev stays on `docker-compose.yml` (app + local db). No change needed.
+#
+# Usage (on org server):
+#   MYSQL_HOST=<cloud-host> MYSQL_USER=<org-user> \
+#   MYSQL_PASSWORD=<org-secret> MYSQL_DATABASE=cft_tracker \
+#   VITE_STORAGE_API_BASE_URL=https://<org-host>/api \
+#   docker compose -f docker-compose.prod.yml up -d --build
+# ---------------------------------------------------------------------------
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cft-tracker-app
+    restart: always
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3001}
+      # Cloud MySQL — all values MUST come from org infra / secrets manager.
+      - MYSQL_HOST=${MYSQL_HOST:?org MYSQL_HOST is required}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-cft_tracker}
+      - MYSQL_USER=${MYSQL_USER:?org MYSQL_USER is required}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?org MYSQL_PASSWORD is required}
+      # Frontend was baked at build time — rebuild if org host differs.
+      - VITE_STORAGE_PROVIDER=organization-api
+      - VITE_STORAGE_API_BASE_URL=${VITE_STORAGE_API_BASE_URL:-/api}
+      - VITE_ORGANIZATION_ID=${VITE_ORGANIZATION_ID:-circor-flow-technologies}
+      - STATE_FILE_PATH=/data/cft-shared-state.json
+    volumes:
+      # Persist JSON fallback outside the container (dev parity only).
+      - cft_app_data:/data
+
+volumes:
+  cft_app_data:
+    driver: local
