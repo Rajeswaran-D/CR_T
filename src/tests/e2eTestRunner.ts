@@ -307,8 +307,8 @@ assert(delaySummaryString.includes('PM Baseline (+4d') && delaySummaryString.inc
 // Test early completion recovery: Stage 4 starts on 08-15 (6d behind plan) and is completed the
 // same day. A stage can never end before it starts, so the engine keeps the end at 08-15 (5d
 // shorter than its 5d plan) and the line recovers from +6d to a net +1d at WO Release.
-line1.milestones[3].actualStartDate = '2026-08-14';
-line1.milestones[3].actualEndDate = '2026-08-14';
+line1.milestones[3].actualStartDate = '2026-08-15';
+line1.milestones[3].actualEndDate = '2026-08-15';
 line1.milestones[3].status = 'Completed';
 line1.milestones[3].completionPct = 100;
 line1.milestones[3].varianceDays = 0;

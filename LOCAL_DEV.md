@@ -31,30 +31,47 @@ Frontend (Vite, exposed to the browser — must never contain secrets):
 Backend (server-side only):
 - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`
 - Optional: `MYSQL_SSL_CA_PATH` / `MYSQL_SSL_CA` (TLS CA for cloud DBs), `PORT`, `CORS_ORIGINS`,
-  `RATE_LIMIT_PER_MIN`, `ENABLE_SCHEMA_ADMIN` + `SCHEMA_ADMIN_TOKEN` (schema DDL endpoint, off by default)
+  `ALLOW_NGROK_ORIGINS`, `RATE_LIMIT_PER_MIN`, `ENABLE_SCHEMA_ADMIN` + `SCHEMA_ADMIN_TOKEN` (schema DDL endpoint, off by default)
 
 The backend loads **only** the repo-root `.env` (path is anchored to `server/db.ts`, so the
 shell's working directory does not matter). `.env.production` is a deployment handover template
 and is **never** loaded by local processes. `npm run dev` (Vite dev mode) also loads only
 `.env` + `.env.local`; `npm run build` reads `.env.production` for production values.
 
-## Startup order (two terminals)
+## Startup options
 
-```powershell
-# Terminal 1 — backend (http://localhost:3001)
+### Option A: Single Command (Frontend + Backend + Ngrok)
+
+`powershell
+npm run start:all
+`
+
+Concurrently starts:
+1. Backend API (http://localhost:5000/api) with MySQL persistence
+2. Vite Frontend (http://localhost:5173/)
+3. Ngrok Public Tunnel (https://<subdomain>.ngrok-free.dev)
+
+### Option B: Separate Terminals
+
+`powershell
+# Terminal 1 — backend (http://localhost:5000)
 npm run server
 
 # Terminal 2 — frontend (http://localhost:5173)
 npm run dev
 ```
 
-Stop with `Ctrl+C` in each terminal. Frontend requests go to `/api` → Vite proxy → `localhost:3001`.
+Stop with `Ctrl+C` in each terminal. Frontend requests go to `/api` → Vite proxy → `localhost:5000`.
+
+For temporary ngrok hosting, start the backend with `ALLOW_NGROK_ORIGINS=true`.
+This opt-in allows browser writes from ngrok HTTPS origins while keeping the
+default CORS allowlist unchanged.
 
 ## Health checks
 
 ```powershell
-Invoke-RestMethod http://localhost:3001/api/health        # status: healthy | degraded | fallback
-Invoke-RestMethod http://localhost:3001/api/db/status     # target host/port/db, TLS, schema tables
+Invoke-RestMethod http://localhost:5000/api/health        # status: healthy | degraded | fallback
+Invoke-RestMethod http://localhost:5000/api/db/status     # target host/port/db, TLS, schema tables
 npm run db:check                                          # independent direct-MySQL check
 ```
 
@@ -78,7 +95,7 @@ there is no login system yet; do not treat the API as production-secure on this 
 | API 503 `Database ... unavailable` | MySQL service stopped | `Start-Service MySQL97` (elevated), then `npm run db:check` |
 | Startup warn `INCOMPLETE config — missing: …` | `.env` incomplete | Restore the named variables in `.env` |
 | `Access denied for user 'cft_app'` | Wrong local password/grant | Re-check `MYSQL_PASSWORD` in `.env`; verify grants locally |
-| Port already in use (5173/3001) | Leftover process | Find with `Get-NetTCPConnection -LocalPort 3001` and stop it |
+| Port already in use (5173/5000) | Leftover process | Find with `Get-NetTCPConnection -LocalPort 5000` and stop it |
 
 ## Resetting test data safely
 

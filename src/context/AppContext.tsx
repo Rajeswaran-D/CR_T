@@ -194,6 +194,39 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const sharedStateKeys = STORAGE_KEYS;
+const PENDING_SHARED_SYNC_STORAGE_KEY = 'cft_pending_shared_sync';
+type PendingSharedSync = Partial<Record<StorageKey, string>>;
+
+const readPendingSharedSync = (): PendingSharedSync => {
+  try {
+    const raw = localStorage.getItem(PENDING_SHARED_SYNC_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed as PendingSharedSync : {};
+  } catch {
+    return {};
+  }
+};
+
+const markPendingSharedSync = (key: StorageKey, serialized: string) => {
+  try {
+    const pending = readPendingSharedSync();
+    pending[key] = serialized;
+    localStorage.setItem(PENDING_SHARED_SYNC_STORAGE_KEY, JSON.stringify(pending));
+  } catch {}
+};
+
+const clearPendingSharedSync = (key: StorageKey, serialized: string) => {
+  try {
+    const pending = readPendingSharedSync();
+    if (pending[key] !== serialized) return;
+    delete pending[key];
+    if (Object.keys(pending).length > 0) {
+      localStorage.setItem(PENDING_SHARED_SYNC_STORAGE_KEY, JSON.stringify(pending));
+    } else {
+      localStorage.removeItem(PENDING_SHARED_SYNC_STORAGE_KEY);
+    }
+  } catch {}
+};
 
 // Broadcasts the outcome of server persistence attempts so the UI can show a
 // truthful status: a failed save flips the Header badge to "Offline"; a
@@ -305,9 +338,10 @@ export function sanitizeDateStr(val: any, fallback?: string): string {
   return fallback || todayLocal();
 }
 
-const saveSharedState = async (key: string, value: unknown) => {
+const saveSharedState = async (key: StorageKey, value: unknown): Promise<boolean> => {
   const config = getStorageConfig();
   const endpoint = getSharedStateEndpoint(config);
+  const serialized = JSON.stringify(value);
   const body = JSON.stringify({ [key]: value });
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -321,8 +355,9 @@ const saveSharedState = async (key: string, value: unknown) => {
         body
       });
       if (res.ok) {
+        clearPendingSharedSync(key, serialized);
         emitStorageSyncStatus(true);
-        return;
+        return true;
       }
       if (attempt === 2) {
         console.warn(`[Storage Sync Warning] PUT ${endpoint} returned status ${res.status}`);
@@ -334,6 +369,7 @@ const saveSharedState = async (key: string, value: unknown) => {
     }
     await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
   }
+  return false;
 };
 const getPurchaseOrderStatus = (productLines: PurchaseOrder['productLines'], isClosed = false): PurchaseOrder['status'] => {
   if (isClosed) return 'Closed';
@@ -776,9 +812,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const purchaseOrdersRef = useRef<PurchaseOrder[]>([]);
+  useEffect(() => { purchaseOrdersRef.current = purchaseOrders; }, [purchaseOrders]);
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
   const [showBlueprintModal, setShowBlueprintModal] = useState<boolean>(false);
-  const [sharedStateReady, setSharedStateReady] = useState(true);
+  const [sharedStateReady, setSharedStateReady] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'offline' | 'mysql'>('connected');
   const backendFailureCountRef = useRef(0);
   const backendSuccessCountRef = useRef(0);
@@ -803,6 +841,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // in-flight edits (the classic read-modify-write clobber), and stops the
   // save effects from re-PUTting unchanged data in an endless echo loop.
   const lastPushedRef = useRef<Partial<Record<StorageKey, string>>>({});
+  const pendingSharedWritesRef = useRef<Set<StorageKey>>(new Set());
 
   const persistState = (key: StorageKey, value: unknown) => {
     const serialized = JSON.stringify(value);
@@ -824,7 +863,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (lastPushedRef.current[key] === serialized) return;
     lastPushedRef.current[key] = serialized;
-    saveSharedState(key, value);
+    markPendingSharedSync(key, serialized);
+    pendingSharedWritesRef.current.add(key);
+    void saveSharedState(key, value).finally(() => {
+      pendingSharedWritesRef.current.delete(key);
+    });
   };
 
   useEffect(() => {
@@ -855,23 +898,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const raw = JSON.parse(value);
             const clean = Array.isArray(raw) ? raw.filter((p: any) => !isLegacyMockPO(p)) : [];
             const normalized = normalizeMilestoneFlows(clean, todayLocal());
-            // Loading an unchanged server snapshot must stay read-only. Without
-            // this guard, normalization creates a new array on every poll,
-            // triggering the persistence effect and rewriting the backend.
-            const currentSerialized = localStorage.getItem('cft_pos');
-            if (JSON.stringify(normalized) === currentSerialized) return;
-            if (currentSerialized) {
-              try {
-                const current = JSON.parse(currentSerialized);
-                const currentNormalized = normalizeMilestoneFlows(
-                  Array.isArray(current) ? current : [],
-                  todayLocal()
-                );
-                if (JSON.stringify(normalized) === JSON.stringify(currentNormalized)) return;
-              } catch {
-                // Fall through and apply a recoverable, valid server snapshot.
-              }
+            const normalizedJson = JSON.stringify(normalized);
+            if (purchaseOrdersRef.current && purchaseOrdersRef.current.length > 0 && JSON.stringify(purchaseOrdersRef.current) === normalizedJson) {
+              return;
             }
+            purchaseOrdersRef.current = normalized;
             setPurchaseOrders(normalized);
             break;
           }
@@ -915,6 +946,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const config = getStorageConfig();
         const endpoint = getSharedStateEndpoint(config);
+        const pendingSharedSync = readPendingSharedSync();
+        for (const [pendingKey, pendingSerialized] of Object.entries(pendingSharedSync)) {
+          if (!pendingSerialized || !sharedStateKeys.includes(pendingKey as StorageKey)) continue;
+          try {
+            await saveSharedState(pendingKey as StorageKey, JSON.parse(pendingSerialized));
+          } catch {
+            // Keep the durable pending record and protect local state below.
+          }
+        }
         const response = await fetch(endpoint, {
           headers: { 'X-Organization-Id': config.organizationId }
         });
@@ -935,6 +975,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!sharedStateKeys.some(storageKey => storageKey === key)) return;
           let serialized = JSON.stringify(value);
 
+          // A poll can overlap a local save. Keep the local snapshot until that
+          // save finishes; otherwise an older server response can briefly erase
+          // an edit before the next poll restores it.
+          if (pendingSharedWritesRef.current.has(key as StorageKey)) return;
+
           // Skip our own echo: the server is only reflecting what this tab pushed.
           if (lastPushedRef.current[key as StorageKey] === serialized) return;
           // No-op: server matches what is already on disk for this key.
@@ -944,66 +989,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (key === 'cft_pos') {
-            // Strip ids this tab or sibling tabs deleted: the DELETE may still be in
-            // flight (or another tab pushed a pre-delete snapshot), so the raw
-            // server list can still contain a row the user already removed.
+            // Once connected, the server snapshot is authoritative for every
+            // device. LocalStorage is device-local cache, not a second source of
+            // truth; merging it here caused two public devices to diverge.
             const rawSharedOrders = (Array.isArray(value) ? value : []) as PurchaseOrder[];
-            const strippedSharedOrders = stripRecentlyDeleted(rawSharedOrders);
-            if (strippedSharedOrders.length !== rawSharedOrders.length) {
-              serialized = JSON.stringify(strippedSharedOrders);
-              if (lastPushedRef.current[key as StorageKey] === serialized) return;
-              if (serialized === localStorage.getItem(key)) {
-                lastPushedRef.current[key as StorageKey] = serialized;
-                return;
-              }
-            }
-            try {
-              const localOrders = JSON.parse(localStorage.getItem('cft_pos') || '[]') as PurchaseOrder[];
-              const sharedOrders = strippedSharedOrders;
-              
-              // Build merged order list to preserve non-deleted local orders across tabs
-              const sharedIdMap = new Map(sharedOrders.map(o => [o.id, o]));
-              const mergedOrders: PurchaseOrder[] = [...sharedOrders];
-              let hasLocalOnly = false;
-              for (const lOrder of localOrders) {
-                if (!sharedIdMap.has(lOrder.id)) {
-                  const isDeleted = recentlyDeletedOrders.has(lOrder.id);
-                  if (!isDeleted) {
-                    mergedOrders.unshift(lOrder);
-                    hasLocalOnly = true;
-                  }
-                } else {
-                  const sOrder = sharedIdMap.get(lOrder.id);
-                  if (sOrder) {
-                    const lTs = lOrder.lastUpdatedAt || '';
-                    const sTs = sOrder.lastUpdatedAt || '';
-                    const localCompletedCount = (lOrder.productLines || []).reduce((acc, l) => 
-                      acc + (l.milestones || []).filter(m => m.status === 'Completed' || m.actualEndDate).length, 0);
-                    const sharedCompletedCount = (sOrder.productLines || []).reduce((acc, l) => 
-                      acc + (l.milestones || []).filter(m => m.status === 'Completed' || m.actualEndDate).length, 0);
-
-                    if (lTs > sTs || (lTs === sTs && localCompletedCount > sharedCompletedCount)) {
-                      const idx = mergedOrders.findIndex(o => o.id === lOrder.id);
-                      if (idx >= 0) mergedOrders[idx] = lOrder;
-                    }
-                  }
-                }
-              }
-              const localLatest = localOrders.reduce((latest, order) => (order.lastUpdatedAt || '') > latest ? (order.lastUpdatedAt || '') : latest, '');
-              const sharedLatest = sharedOrders.reduce((latest, order) => (order.lastUpdatedAt || '') > latest ? (order.lastUpdatedAt || '') : latest, '');
-              
-              if (hasLocalOnly || localLatest > sharedLatest) {
-                const mergedSerialized = JSON.stringify(mergedOrders);
-                localStorage.setItem(key, mergedSerialized);
-                applyStoredState(key, mergedSerialized);
-                // The normal state persistence effect owns writes. Avoid
-                // issuing a second write from the read/poll path, which made
-                // unchanged backend data oscillate between snapshots.
-                return;
-              }
-            } catch {
-              // Fall through to the shared state when local data cannot be compared.
-            }
+            serialized = JSON.stringify(stripRecentlyDeleted(rawSharedOrders));
+            if (lastPushedRef.current[key as StorageKey] === serialized) return;
           }
           localStorage.setItem(key, serialized);
           applyStoredState(key, serialized);

@@ -12,7 +12,7 @@
 | `MYSQL_DATABASE` | no (default `cft_tracker`) | `cft_tracker` |
 | `MYSQL_USER` | yes | `cft_app` |
 | `MYSQL_PASSWORD` | yes (secret manager) | `***` |
-| `PORT` | no (default `3001`) | `3001` |
+| `PORT` | no (default `5000`) | `5000` |
 | `VITE_STORAGE_API_BASE_URL` | no (default `/api`) | `https://tracker.cicor.example/api` |
 | `VITE_ORGANIZATION_ID` | no | `circor-flow-technologies` |
 
@@ -47,7 +47,7 @@ MYSQL_PASSWORD=<org-secret> MYSQL_DATABASE=cft_tracker \
 VITE_STORAGE_API_BASE_URL=https://<org-host>/api \
 docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml logs -f app
-curl http://localhost:3001/api/health
+curl http://localhost:5000/api/health
 ```
 
 ## 4. Data migration (local JSON -> cloud)

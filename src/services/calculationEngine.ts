@@ -220,7 +220,9 @@ export function normalizeLineDates(line: ProductLine, todayStr: string): Product
 
     if (start) {
       const anchor = chainAnchorDate(normalized, i, todayStr);
-      if (anchor && start < anchor) start = anchor;
+      if (anchor && start < anchor) {
+        start = end ? (anchor <= end ? anchor : start) : anchor;
+      }
     }
 
     if (start && end && end < start) end = start;
@@ -621,6 +623,9 @@ export function recalculateProductLine(
     const effEnd = ms.actualEndDate || forecastEnd;
     let varianceDays: number;
 
+    const prevMs = msIndex > 0 ? updatedMilestones[msIndex - 1] : undefined;
+    const inheritedDelay = prevMs ? Math.max(0, typeof prevMs.varianceDays === 'number' ? prevMs.varianceDays : 0) : 0;
+
     if (isMaterialStage) {
       const matLeadTime = (criticalMat && typeof criticalMat.leadTimeDays === 'number' && criticalMat.leadTimeDays > 0)
         ? criticalMat.leadTimeDays
@@ -629,18 +634,22 @@ export function recalculateProductLine(
         ? forecastStart
         : (ms.committedBaselineStartDate || forecastStart);
       const targetDelivery = targetOrderStart ? addDays(targetOrderStart, Math.max(0, matLeadTime - 1)) : forecastEnd;
-      const crossingLine = criticalMat?.expectedDate || targetDelivery || ms.committedBaselineEndDate;
-
-      const prevMs = msIndex > 0 ? updatedMilestones[msIndex - 1] : undefined;
-      const inheritedDelay = prevMs ? Math.max(0, typeof prevMs.varianceDays === 'number' ? prevMs.varianceDays : 0) : 0;
+      const revisedTarget = ms.committedBaselineEndDate
+        ? addDays(ms.committedBaselineEndDate, inheritedDelay)
+        : forecastEnd;
+      const crossingLine = criticalMat?.expectedDate || revisedTarget || targetDelivery || ms.committedBaselineEndDate;
 
       if (ms.actualEndDate) {
         if (crossingLine && ms.actualEndDate > crossingLine) {
           const newDelay = getDaysDifference(crossingLine, ms.actualEndDate);
           varianceDays = inheritedDelay + newDelay;
         } else if (crossingLine && ms.actualEndDate < crossingLine) {
+          const baselineDiff = ms.committedBaselineEndDate
+            ? getDaysDifference(ms.committedBaselineEndDate, ms.actualEndDate)
+            : 0;
           const daysEarly = getDaysDifference(ms.actualEndDate, crossingLine);
-          varianceDays = inheritedDelay - daysEarly;
+          // Recover time from crossing line, but physical variance cannot fall below baseline deviation when late against baseline
+          varianceDays = Math.max(baselineDiff, inheritedDelay - daysEarly);
         } else {
           varianceDays = inheritedDelay;
         }
@@ -653,14 +662,12 @@ export function recalculateProductLine(
         }
       }
     } else {
-      const prevMs = msIndex > 0 ? updatedMilestones[msIndex - 1] : undefined;
-      const inheritedDelay = prevMs ? Math.max(0, typeof prevMs.varianceDays === 'number' ? prevMs.varianceDays : 0) : 0;
-
       if (!ms.actualStartDate && !ms.actualEndDate && !hasInPrepSub) {
         // An unstarted milestone inherits schedule variance strictly from its predecessor.
         // It cannot accumulate independent execution delay before work begins.
         varianceDays = inheritedDelay;
       } else {
+        // For active or completed milestones, variance is measured against the committed baseline end date
         varianceDays = effEnd > ms.committedBaselineEndDate 
           ? Math.max(1, getDaysDifference(ms.committedBaselineEndDate, effEnd))
           : getDaysDifference(ms.committedBaselineEndDate, effEnd);
@@ -989,5 +996,40 @@ export function getMilestoneRevisedDates(
     baselineStart,
     baselineEnd,
     baselineDuration
+  };
+}
+
+/**
+ * Calculates customer contractual delivery variance and delivery risk.
+ * 
+ * Separates the 3 critical schedule metrics:
+ * 1. Individual milestone variance = effEnd - committedBaselineEndDate
+ * 2. Overall manufacturing schedule variance = finalMilestone.varianceDays
+ * 3. Customer contractual delivery variance = projectedDeliveryDate - committedDeliveryDate
+ */
+export function calculateContractualDeliveryVariance(
+  committedDeliveryDate: string,
+  projectedDeliveryDate: string
+): {
+  contractualVarianceDays: number;
+  isContractuallyDelayed: boolean;
+  isContractuallyAtRisk: boolean;
+  bufferDaysRemaining: number;
+} {
+  if (!isValidDateString(committedDeliveryDate) || !isValidDateString(projectedDeliveryDate)) {
+    return {
+      contractualVarianceDays: 0,
+      isContractuallyDelayed: false,
+      isContractuallyAtRisk: false,
+      bufferDaysRemaining: 0
+    };
+  }
+
+  const diff = getDaysDifference(committedDeliveryDate, projectedDeliveryDate);
+  return {
+    contractualVarianceDays: diff, // > 0 means delivery breaches customer contract; < 0 means ahead of contract
+    isContractuallyDelayed: diff > 0,
+    isContractuallyAtRisk: diff > -3 && diff <= 0,
+    bufferDaysRemaining: Math.max(0, -diff)
   };
 }

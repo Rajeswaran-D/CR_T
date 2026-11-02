@@ -22,6 +22,7 @@ export interface DbConfig {
   password?: string;
   database: string;
   connectionLimit: number;
+  dateStrings?: boolean;
   ssl?: {
     ca: string | Buffer;
     rejectUnauthorized: boolean;
@@ -95,7 +96,8 @@ function buildDbConfig(): DbConfig {
     user,
     password,
     database,
-    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT || 10)
+    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT || 10),
+    dateStrings: true
   };
 
   // Set TLS/SSL only when CA is provided. Reject unauthorized is strictly true.

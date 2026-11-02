@@ -49,9 +49,9 @@ export function formatDbDate(val: any): string {
   if (!val) return '';
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return '';
-    const y = val.getUTCFullYear();
-    const m = String(val.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(val.getUTCDate()).padStart(2, '0');
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const str = String(val).trim();
@@ -250,7 +250,7 @@ export async function saveOrdersToDb(pool: Pool, orgId: string, orders: Purchase
       if (
         Number.isFinite(incomingTimestamp) &&
         storedTimestamp !== undefined &&
-        incomingTimestamp < storedTimestamp
+        incomingTimestamp < (storedTimestamp - 5000)
       ) {
         continue;
       }

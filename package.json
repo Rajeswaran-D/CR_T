@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start:all": "node scripts/start-all.cjs",
     "build": "tsc -b && vite build",
     "server": "tsx server/server.ts",
     "start": "tsx server/server.ts",

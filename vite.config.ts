@@ -16,19 +16,26 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host: '0.0.0.0',
     port: 5173,
+    allowedHosts: true,
+    hmr: {
+      clientPort: 443
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
+        secure: false,
+        ws: true,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, res) => {
-            console.error(`[vite-proxy] Backend at http://localhost:3001 unreachable: ${err.message}`);
+            console.error(`[vite-proxy] Backend at http://127.0.0.1:5000 unreachable: ${err.message}`);
             // Honest failure: never fabricate a success for a dead backend.
             if (res && 'writeHead' in res && !res.headersSent) {
               res.writeHead(502, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
-                error: 'Backend unavailable. Start it with "npm run server" (expected at http://localhost:3001).',
+                error: 'Backend unavailable. Start it with "npm run server" (expected at http://127.0.0.1:5000).',
                 devProxy: true
               }));
             }

@@ -96,7 +96,7 @@ export function getStorageConfig(): StorageConfig {
   }
 
   // 5. Default to relative /api: in dev the Vite proxy forwards it to the
-  //    local Express backend (localhost:3001); on Vercel the vercel.json
+  //    local Express backend (localhost:5000); on Vercel the vercel.json
   //    rewrite forwards it to the Render API.
   if (!apiBaseUrl) {
     apiBaseUrl = '/api';

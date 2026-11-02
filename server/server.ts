@@ -48,7 +48,8 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+app.set('trust proxy', true);
+const PORT = process.env.PORT || 5000;
 const stateFile = process.env.STATE_FILE_PATH || path.join(os.homedir(), '.cft-project-e2e-tracker-shared-state.json');
 const SHARED_STATE_CACHE_TTL_MS = 1_000;
 type SharedStatePayload = Record<string, unknown>;

@@ -49,14 +49,14 @@ export const STANDARD_STAGES_IMPORT_MAP = [
 // ---------------------------------------------------------------------------
 
 export const STAGE_ACTUAL_ALIASES: Record<number, string[]> = {
-  1: ['Customer PO Date', 'Customer PO Actual', 'Customer PO Intake', 'PO Intake', 'PO Date', 'Order Date', 'Date'],
+  1: ['Customer PO Date', 'Customer PO Actual', 'Customer PO Intake', 'PO Intake', 'PO Date', 'Order Date Actual', 'Order Date', 'Date'],
   2: ['PM Baseline Actual', 'PM Baseline Date', 'PM Baseline', 'Baseline Review & Planning', 'Baseline Review', 'Baseline Actual', 'Baseline Date', 'PM Baseline Schedule'],
-  3: ['CORB Release Actual', 'CORB Release Date', 'CORB Actual', 'CORB Release', 'CORB Open Points Closure', 'CORB Open Points', 'CORB'],
-  4: ['BOM Release Actual', 'BOM Actual', 'BOM Release Date', 'BOM Release', 'BOM'],
+  3: ['CORB Release Actual', 'CORB Actual', 'CORB Actual Date', 'CORB Release Date', 'CORB Release', 'CORB Open Points Closure', 'CORB Open Points', 'CORB'],
+  4: ['BOM Release Actual', 'BOM Actual', 'BOM Release Date', 'BOM Release', 'BOM', 'Mini-BOM Actual', 'Mini-BOM Release Actual', 'Mini BOM Actual'],
   5: ['Work Order Release Actual', 'WO Release Actual', 'WO Actual', 'Work Order Release', 'WO Release Date', 'WO Release', 'Work Order', 'WO', 'PO - Long Leads Actual', 'Long Lead PO Actual', 'PO - Long Leads', 'Long Leads Actual'],
   // "PO" and "PO Date" are deliberately excluded: they are the customer-PO columns on
   // ordinary sheets, and matching them fabricated a completed Sub-Supplier PO stage.
-  6: ['Sub-Supplier PO Actual', 'Sub Supplier PO Actual', 'Sub-Supplier PO Date', 'Sub Supplier PO Date', 'Sub-Supplier PO', 'Sub Supplier PO', 'PO Actual'],
+  6: ['Sub-Supplier PO Actual', 'Sub Supplier PO Actual', 'Sub-Supplier PO Date', 'Sub Supplier PO Date', 'Sub-Supplier PO', 'Sub Supplier PO', 'PO Actual', 'Next Milestone Actual', 'Next Milestone Date', 'Next Milestone'],
   7: ["Mat'l receipt Actual", 'Material Receipts Actual', 'Material Receipt Actual', 'Material Receipt Date', 'Material Receipt (GRN)', 'Material Receipt', 'Material Receipts', 'GRN Actual', 'GRN Date', 'GRN'],
   8: ['Machining Actual', 'Machining Date', 'Machining Complete', 'Machining'],
   9: ['Assembly Actual', 'Assembly Date', 'Assembly Complete', 'Assembly'],
@@ -64,16 +64,16 @@ export const STAGE_ACTUAL_ALIASES: Record<number, string[]> = {
   11: ['Customer Inspection Actual', 'Customer Inspection Date', 'Inspection Actual', 'Customer Inspection', 'Inspection Complete', 'Inspection'],
   12: ['Painting Actual', 'Painting Date', 'Painting Complete', 'Painting'],
   13: ['TRN Actual', 'TRN Date', 'Test Report Notice', 'TRN Complete', 'TRN'],
-  14: ['Packing & Dispatch Actual', 'Packing & Dispatch Date', 'Packing / Shipping Actual', 'Final Shipment & Dispatch Actual', 'Shipment Actual', 'Dispatch Actual', 'Packing & Dispatch', 'Packing / Shipping', 'Shipment Date', 'Dispatch Date']
+  14: ['Packing & Dispatch Actual', 'Packing & Dispatch Date', 'Packing / Shipping Actual', 'Final Shipment & Dispatch Actual', 'Shipment Actual', 'Dispatch Actual', 'Packing & Dispatch', 'Packing / Shipping', 'Shipment Date', 'Dispatch Date', 'Customer Delivery Actual', 'Customer Delivery Date']
 };
 
 export const STAGE_PLANNED_ALIASES: Record<number, string[]> = {
-  1: ['S1_CustomerPO_Planned', 'Customer PO Planned', 'Customer PO Date', 'PO Date'],
+  1: ['S1_CustomerPO_Planned', 'Customer PO Planned', 'Customer PO Date', 'PO Date', 'Order Date Planned', 'Order Date Target', 'Order Date'],
   2: ['S2_PMBaseline_Planned', 'PM Baseline Planned', 'PM Baseline Target', 'Baseline Planned', 'PM Baseline Plan'],
-  3: ['S3_CORB_Planned', 'CORB Release Planned', 'CORB Planned', 'CORB Plan', 'CORB Target'],
-  4: ['S4_BOMRelease_Planned', 'BOM Release Planned', 'BOM Planned', 'BOM Plan', 'BOM Target Date', 'BOM Target'],
+  3: ['S3_CORB_Planned', 'CORB Release Planned', 'CORB Planned', 'CORB Plan', 'CORB Target Date', 'CORB Target', 'CORB Planned Date', 'CORB Plan Date'],
+  4: ['S4_BOMRelease_Planned', 'BOM Release Planned', 'BOM Planned', 'BOM Plan', 'BOM Target Date', 'BOM Target', 'Mini-BOM Planned', 'Mini-BOM Plan', 'Mini BOM Planned'],
   5: ['S5_WORelease_Planned', 'Work Order Release Planned', 'WO Release Planned', 'Work Order Planned', 'WO Planned', 'PO - Long Leads Planned', 'Long Lead PO Planned'],
-  6: ['S6_SubSupplierPO_Planned', 'Sub-Supplier PO Planned', 'Sub Supplier PO Planned', 'PO Planned'],
+  6: ['S6_SubSupplierPO_Planned', 'Sub-Supplier PO Planned', 'Sub Supplier PO Planned', 'PO Planned', 'Next Milestone Planned', 'Next Milestone Plan', 'Next Milestone Target', 'Next Milestone Target Date'],
   7: ['S7_MaterialReceipt_Planned', "Mat'l receipt Planned", 'Material Receipts Planned', 'Material Receipt Planned', 'Material Expected Date', 'S7_MaterialExpectedDate', 'GRN Planned'],
   // "Lead Time for Inhouse process" is a DURATION, not a date; binding it produced an
   // unparseable value that then silently dropped out, hiding the real problem.
@@ -83,7 +83,7 @@ export const STAGE_PLANNED_ALIASES: Record<number, string[]> = {
   11: ['S11_Inspection_Planned', 'Customer Inspection Planned', 'Inspection Planned', 'Customer Inspection Target'],
   12: ['S12_Painting_Planned', 'Painting Planned', 'Painting Plan', 'Painting Target'],
   13: ['S13_TRN_Planned', 'TRN Planned', 'Test Report Notice Planned', 'TRN Target'],
-  14: ['S14_Shipment_Planned', 'Packing & Dispatch Planned', 'Packing & Dispatch Plan', 'Packing / Shipping Planned', 'Packing / Shipping Plan', 'Shipment Planned', 'Dispatch Planned', 'Final Shipment Planned', 'Target Delivery Date', 'Promised Date', 'COTD']
+  14: ['S14_Shipment_Planned', 'Packing & Dispatch Planned', 'Packing & Dispatch Plan', 'Packing / Shipping Planned', 'Packing / Shipping Plan', 'Shipment Planned', 'Dispatch Planned', 'Final Shipment Planned', 'Target Delivery Date', 'Promised Date', 'COTD', 'Customer Delivery Planned', 'Customer Delivery Target', 'Customer Delivery Date', 'Customer Delivery']
 };
 
 export const STAGE_DELAY_ALIASES: Record<number, string[]> = {
@@ -92,7 +92,7 @@ export const STAGE_DELAY_ALIASES: Record<number, string[]> = {
   3: ['S3_CORB_Delay', 'Delay CORB Release', 'CORB Release Delay', 'CORB Delay', 'Clarification Delay after CORB', 'CORB Open Points Delay'],
   4: ['S4_BOMRelease_Delay', 'BOM Delay', 'Delay in BOM', 'BOM Release Delay'],
   5: ['S5_WORelease_Delay', 'Work Order Delay', 'WO Release Delay', 'WO Delay', 'Delay in Long lead PO', 'PO - Long Leads Delay', 'Long Lead PO Delay'],
-  6: ['S6_SubSupplierPO_Delay', 'Sub-Supplier PO Delay', 'PO Delay', 'Delay in PO'],
+  6: ['S6_SubSupplierPO_Delay', 'Sub-Supplier PO Delay', 'PO Delay', 'Delay in PO', 'Next Milestone Delay'],
   7: ['S7_MaterialReceipt_Delay', "Mat'l receipt delay", 'Material Receipts Delay', 'Material Receipt Delay', 'GRN Delay'],
   8: ['S8_Machining_Delay', 'Machining Delay', 'Delay in Machining'],
   9: ['S9_Assembly_Delay', 'Assembly Delay', 'Delay in Assembly'],
@@ -108,7 +108,7 @@ export const STAGE_ACTUAL_REJECTS: Record<number, string[]> = {
   1: ['planned', 'delay', 'target', 'forecast'],
   2: ['planned', 'delay', 'target', 'forecast'],
   3: ['planned', 'delay', 'target', 'forecast', 'clarification'],
-  4: ['mini-bom', 'minibom', 'planned', 'delay', 'target', 'forecast'],
+  4: ['planned', 'delay', 'target', 'forecast'],
   5: ['mini-bom', 'minibom', 'planned', 'delay', 'target', 'forecast'],
   6: ['planned', 'delay', 'target', 'forecast', 'longlead', 'long-lead'],
   7: ['planned', 'delay', 'target', 'forecast', 'expected', 'leadtime'],
@@ -126,7 +126,7 @@ export const STAGE_PLANNED_REJECTS: Record<number, string[]> = {
   1: ['actual', 'delay', 'target', 'forecast'],
   2: ['actual', 'delay', 'forecast'],
   3: ['actual', 'delay', 'forecast', 'clarification'],
-  4: ['mini-bom', 'minibom', 'actual', 'delay', 'forecast'],
+  4: ['actual', 'delay', 'forecast'],
   5: ['mini-bom', 'minibom', 'actual', 'delay', 'forecast'],
   6: ['actual', 'delay', 'forecast', 'longlead', 'long-lead'],
   7: ['actual', 'delay', 'forecast', 'leadtime'],
@@ -1442,7 +1442,7 @@ export function parseAndValidateCsv(
           const parsed = normalizeCsvDate(rawDate);
           if (parsed) {
             // Check chronological sanity
-            if (lastActualDate && parsed < lastActualDate) {
+            if (lastActualDate && parsed < lastActualDate && stageDef.stage !== 5) {
               rowWarnings.push(`Row #${rowNum}: ${stageDef.name} actual date (${parsed}) is earlier than previous milestone date (${lastActualDate}).`);
             }
             stageActualDates[stageDef.key] = parsed;
@@ -1706,6 +1706,7 @@ export function parseAndValidateCsv(
 
       // Apply historical completion dates, bridge omitted stages, and activate the real live stage
       let runningChainDate = effectivePoDate;
+      let runningCumulativeDelay = 0;
 
       const configuredMilestones: Milestone[] = baseMilestones.map((m, mIdx) => {
         const explicitActualEnd = rawLine.stageActualDates[m.key];
@@ -1715,9 +1716,14 @@ export function parseAndValidateCsv(
         const isActiveStage = mIdx === maxCompletedIndex + 1;
 
         const alignedBase = alignedBaselines[mIdx];
-        const baselineStart = alignedBase.start;
-        const effectivePlannedEnd = alignedBase.end;
-        const baselineDuration = alignedBase.duration;
+        const explicitPlannedEnd = rawLine.stagePlannedDates[m.key];
+        const effectivePlannedEnd = explicitPlannedEnd || alignedBase.end;
+        const baselineStart = alignedBase.start > effectivePlannedEnd ? effectivePlannedEnd : alignedBase.start;
+        const baselineDuration = Math.max(1, getDaysDifference(baselineStart, effectivePlannedEnd) + 1);
+
+        // Calculate and preserve distinct revised target dates separate from actual entered dates
+        const revisedTargetStart = addDays(baselineStart, runningCumulativeDelay);
+        const revisedTargetEnd = addDays(effectivePlannedEnd, runningCumulativeDelay);
 
         let delayReason = m.delayReason;
         let delayCategory = m.delayCategory;
@@ -1726,22 +1732,27 @@ export function parseAndValidateCsv(
         if (actualEnd || isCompleted) {
           // Completed milestone (either explicitly dated in Excel or auto-bridged operational predecessor)
           const isExplicit = Boolean(explicitActualEnd);
-          // A missing historical date is not an actual event. Use the committed
-          // baseline only to bridge the imported stage sequence; otherwise the
-          // importer invents late completions and double-counts delay.
-          const effectiveActualEnd = actualEnd || effectivePlannedEnd;
+          // Use explicit actual date from Excel when present; otherwise use inferred or planned date.
+          const effectiveActualEnd = explicitActualEnd || actualEnd || effectivePlannedEnd;
           const actualStart = actualEnd
             ? ((m.key === 'material_receipt' && effectiveMatOrderDate)
               ? effectiveMatOrderDate
-              : (runningChainDate <= actualEnd ? runningChainDate : actualEnd))
+              : (runningChainDate <= effectiveActualEnd ? runningChainDate : effectiveActualEnd))
             : baselineStart;
-          runningChainDate = effectiveActualEnd || runningChainDate;
+          runningChainDate = effectiveActualEnd > runningChainDate ? effectiveActualEnd : runningChainDate;
 
           let calculatedDelay = 0;
-          if (isExplicit && effectivePlannedEnd && effectiveActualEnd && effectiveActualEnd > effectivePlannedEnd) {
+          if (effectivePlannedEnd && effectiveActualEnd && effectiveActualEnd > effectivePlannedEnd) {
             calculatedDelay = getDaysDifference(effectivePlannedEnd, effectiveActualEnd);
           }
-          const effectiveDelay = Math.max(calculatedDelay, excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0);
+          // The milestone's variance against original baseline:
+          // If the milestone ended on or after its revised timeline, its variance is at least runningCumulativeDelay
+          // This ensures that completing as per the revised timeline never creates a false 'delay resolved'
+          const effectiveDelay = Math.max(
+            calculatedDelay,
+            excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0,
+            effectiveActualEnd >= revisedTargetEnd ? runningCumulativeDelay : 0
+          );
 
           if (effectiveDelay > 0) {
             varianceDays = effectiveDelay;
@@ -1749,12 +1760,18 @@ export function parseAndValidateCsv(
               ? rawLine.remarks.trim()
               : `${m.name} delayed by +${effectiveDelay}d (Planned: ${effectivePlannedEnd}, Actual: ${effectiveActualEnd})`;
             delayCategory = getDelayCategoryForMilestone(m.key);
+          } else if (effectiveActualEnd < effectivePlannedEnd) {
+            varianceDays = getDaysDifference(effectivePlannedEnd, effectiveActualEnd);
           }
+
+          // Update running cumulative delay for downstream milestones
+          runningCumulativeDelay = Math.max(0, varianceDays);
 
           return {
             ...m,
             committedBaselineStartDate: baselineStart,
             committedBaselineEndDate: effectivePlannedEnd,
+            currentBaselineEndDate: revisedTargetEnd,
             committedDurationDays: baselineDuration,
             actualStartDate: actualStart,
             actualEndDate: effectiveActualEnd,
@@ -1770,20 +1787,20 @@ export function parseAndValidateCsv(
               : (isExplicit ? 'LEGACY-IMPORT' : (actualEnd ? 'AUTO-INFERRED' : 'AUTO-BRIDGED'))
           };
         } else if (isActiveStage) {
-          // Active in-progress milestone
+          // Active milestone (ready to start or in-progress)
+          const hasExplicitActualStart = Boolean(rawLine.stageActualDates[m.key]);
           const stageStart = (m.key === 'material_receipt' && effectiveMatOrderDate)
             ? effectiveMatOrderDate
-            : runningChainDate;
+            : (hasExplicitActualStart ? rawLine.stageActualDates[m.key] : (runningChainDate > revisedTargetStart ? runningChainDate : revisedTargetStart));
           const stageForecastEnd = (m.key === 'material_receipt' && effectiveMatExpectedDate)
             ? effectiveMatExpectedDate
             : addDays(stageStart, baselineDuration - 1);
           runningChainDate = addDays(stageForecastEnd, 1);
 
-          // A forecast for work that has not completed is not evidence of an
-          // actual delay. Only an explicit spreadsheet delay or a late actual
-          // completion may create imported variance; otherwise the schedule
-          // remains a forecast and cannot grow into a delay on refresh.
-          const effectiveDelay = excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0;
+          const effectiveDelay = Math.max(
+            excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0,
+            runningCumulativeDelay
+          );
 
           if (effectiveDelay > 0) {
             varianceDays = effectiveDelay;
@@ -1797,8 +1814,10 @@ export function parseAndValidateCsv(
             ...m,
             committedBaselineStartDate: baselineStart,
             committedBaselineEndDate: effectivePlannedEnd,
+            currentBaselineEndDate: revisedTargetEnd,
             committedDurationDays: baselineDuration,
             actualStartDate: stageStart,
+            actualEndDate: undefined,
             forecastStartDate: stageStart,
             forecastEndDate: stageForecastEnd,
             status: (effectiveDelay > 3 ? 'Delayed' : (effectiveDelay > 0 ? 'At Risk' : 'In Progress')) as MilestoneStatus,
@@ -1809,15 +1828,14 @@ export function parseAndValidateCsv(
           };
         } else {
           // Future pending stages: STRICTLY NO actualStartDate!
-          const stageStart = runningChainDate;
+          const stageStart = runningChainDate > revisedTargetStart ? runningChainDate : revisedTargetStart;
           const stageForecastEnd = addDays(stageStart, baselineDuration - 1);
           runningChainDate = addDays(stageForecastEnd, 1);
 
-          // Do not mark a future, unstarted stage delayed merely because its
-          // projected chain date is later than the baseline. Delay is recorded
-          // when the stage has an explicit imported delay value or actual work
-          // has completed late.
-          const effectiveDelay = excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0;
+          const effectiveDelay = Math.max(
+            excelDelay !== undefined && excelDelay > 0 ? excelDelay : 0,
+            runningCumulativeDelay
+          );
 
           if (effectiveDelay > 0) {
             varianceDays = effectiveDelay;
@@ -1831,6 +1849,7 @@ export function parseAndValidateCsv(
             ...m,
             committedBaselineStartDate: baselineStart,
             committedBaselineEndDate: effectivePlannedEnd,
+            currentBaselineEndDate: revisedTargetEnd,
             committedDurationDays: baselineDuration,
             actualStartDate: undefined,
             actualEndDate: undefined,

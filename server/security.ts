@@ -136,6 +136,11 @@ export function isAllowedOrigin(origin: string): boolean {
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) {
     return true;
   }
+  // Temporary public development tunnels are opt-in and limited to ngrok's
+  // HTTPS domains. Keep this disabled by default for deployed environments.
+  if (process.env.ALLOW_NGROK_ORIGINS === 'true' && /^https:\/\/[^/]+\.ngrok(?:-free)?\.(dev|app|io)$/.test(normalized)) {
+    return true;
+  }
   return false;
 }
 
@@ -150,7 +155,7 @@ export function corsGuard(req: Request, res: Response, next: NextFunction): void
     res.setHeader('Access-Control-Allow-Origin', normalized);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Organization-Id, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Organization-Id, Authorization, ngrok-skip-browser-warning');
     res.setHeader('Access-Control-Max-Age', '600');
   }
   if (req.method === 'OPTIONS') {
@@ -178,15 +183,16 @@ export function rateLimiter(req: Request, res: Response, next: NextFunction): vo
   }
   const now = Date.now();
   if (rateBuckets.size > 10_000) rateBuckets.clear(); // bound memory
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const xff = req.headers['x-forwarded-for'];
+  const ip = (typeof xff === 'string' ? xff.split(',')[0].trim() : (Array.isArray(xff) ? xff[0] : null)) || req.ip || req.socket.remoteAddress || 'unknown';
   let bucket = rateBuckets.get(ip);
   if (!bucket || now >= bucket.resetAt) {
     bucket = { count: 0, resetAt: now + RATE_WINDOW_MS };
     rateBuckets.set(ip, bucket);
   }
   bucket.count += 1;
-  res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
   if (bucket.count > max) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
     res.status(429).json({ error: 'Too many requests. Please retry shortly.' });
     return;
   }

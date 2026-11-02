@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
 
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = 'http://localhost:5000/api';
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -37,7 +37,7 @@ async function run() {
   const serverProc: ChildProcess = spawn('npx', ['tsx', serverPath], {
     shell: true,
     stdio: 'pipe',
-    env: { ...process.env, PORT: '3001' }
+    env: { ...process.env, PORT: '5000' }
   });
 
   serverProc.stdout?.on('data', (_d: unknown) => {
@@ -67,7 +67,7 @@ async function run() {
     process.exit(1);
   }
 
-  console.log('⚡ Server is ONLINE on port 3001!\n');
+  console.log('⚡ Server is ONLINE on port 5000!\n');
 
   const results: boolean[] = [];
 
