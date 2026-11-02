@@ -1584,7 +1584,7 @@ export function parseAndValidateCsv(
         stagePlannedDates,
         stageDelays,
         matOrderDate: matOrderDate || undefined,
-        matExpectedDate: matExpectedDate || stagePlannedDates['material_receipt'] || undefined,
+        matExpectedDate: matExpectedDate || undefined,
         matReceivedDate: stageActualDates['material_receipt'] || undefined,
         inspectionResult: rawInspection ? parsedInspection : (stageActualDates['material_receipt'] ? 'Passed' : 'Pending'),
         remarks: rawRemarks || undefined,
@@ -1864,6 +1864,16 @@ export function parseAndValidateCsv(
         }
       });
 
+      // Ensure lineMaterials critical-path expectedDate aligns with Stage 7's revised target date
+      const s7Configured = configuredMilestones.find(m => m.key === 'material_receipt');
+      if (s7Configured) {
+        lineMaterials = lineMaterials.map(m => ({
+          ...m,
+          leadTimeDays: s7Configured.committedDurationDays || m.leadTimeDays,
+          expectedDate: rawLine.matExpectedDate || s7Configured.currentBaselineEndDate || m.expectedDate
+        }));
+      }
+
       const rawProductLine: ProductLine = {
         id: lineId,
         lineNumber: lineNum,
@@ -1878,7 +1888,15 @@ export function parseAndValidateCsv(
       };
 
       // Run calculation engine to normalize and recalculate all dates & variances
-      return recalculateProductLine(rawProductLine, todayStr);
+      const recalculated = recalculateProductLine(rawProductLine, todayStr);
+      return {
+        ...recalculated,
+        materials: lineMaterials,
+        milestones: recalculated.milestones.map((ms, idx) => ({
+          ...ms,
+          currentBaselineEndDate: configuredMilestones[idx]?.currentBaselineEndDate || ms.currentBaselineEndDate || ms.committedBaselineEndDate
+        }))
+      };
     });
 
     // Derive PO dates
