@@ -342,6 +342,36 @@ export function canProcurementStart(productLine: ProductLine): { allowed: boolea
 /**
  * Identifies the critical path item among materials (longest lead time).
  */
+/**
+ * Calculates product lead time based on raw material lead times and manufacturing duration.
+ * Identifies the critical path material (longest lead time).
+ * Product Total Lead Time = Critical Material Lead Time + Manufacturing Duration.
+ */
+export function calculateProductLeadTime(params: {
+  materials?: Array<{ leadTimeDays: number; isCriticalPath?: boolean }>;
+  manufacturingLeadTimeDays?: number;
+  designType?: DesignType;
+}): {
+  criticalMaterialLeadTimeDays: number;
+  manufacturingLeadTimeDays: number;
+  totalLeadTimeDays: number;
+} {
+  const mats = params.materials || [];
+  const criticalMatLead = mats.length > 0
+    ? Math.max(...mats.map(m => Number(m.leadTimeDays) || 0))
+    : 14;
+
+  const mfgDays = typeof params.manufacturingLeadTimeDays === 'number' && params.manufacturingLeadTimeDays >= 0
+    ? params.manufacturingLeadTimeDays
+    : (params.designType === 'New Design' ? 45 : 24);
+
+  return {
+    criticalMaterialLeadTimeDays: criticalMatLead,
+    manufacturingLeadTimeDays: mfgDays,
+    totalLeadTimeDays: Math.max(1, criticalMatLead + mfgDays)
+  };
+}
+
 export function updateMaterialCriticalPath(materials: MaterialItem[]): MaterialItem[] {
   if (materials.length === 0) return materials;
 

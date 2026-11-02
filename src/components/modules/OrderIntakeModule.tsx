@@ -65,15 +65,25 @@ export const OrderIntakeModule: React.FC = () => {
   const [poStartDate, setPoStartDate] = useState(today);
   const [committedDeliveryDate, setCommittedDeliveryDate] = useState("");
 
+  const getLineLeadTime = (l: ProductLineInput) => {
+    const cat = l.designType === "Existing Design" ? products.find((p) => p.productName === l.selectedProduct) : undefined;
+    const matLead = l.materials.length > 0
+      ? Math.max(...l.materials.map((m) => Number(m.leadTimeDays) || 0))
+      : (cat?.defaultMaterials && cat.defaultMaterials.length > 0 ? Math.max(...cat.defaultMaterials.map((m) => m.leadTimeDays)) : 14);
+
+    const mfgLead = cat?.manufacturingLeadTimeDays ?? (cat ? Math.max(1, cat.totalLeadTimeDays - (cat.defaultMaterials && cat.defaultMaterials.length > 0 ? Math.max(...cat.defaultMaterials.map(m => m.leadTimeDays)) : 14)) : (l.designType === "New Design" ? 45 : 24));
+    const totalLead = l.designType === "New Design"
+      ? Math.max(90, matLead + mfgLead)
+      : Math.max(cat?.totalLeadTimeDays || 42, matLead + mfgLead);
+
+    return { matLead, mfgLead, totalLead };
+  };
+
   const getDeadline = (): string => {
     let maxLeadTime = 42;
     for (const l of lines) {
-      if (l.designType === "Existing Design") {
-        const cat = products.find((p) => p.productName === l.selectedProduct);
-        if (cat) maxLeadTime = Math.max(maxLeadTime, cat.totalLeadTimeDays);
-      } else {
-        maxLeadTime = Math.max(maxLeadTime, 90);
-      }
+      const { totalLead } = getLineLeadTime(l);
+      maxLeadTime = Math.max(maxLeadTime, totalLead);
     }
     return addDays(poStartDate || today, Math.max(0, maxLeadTime - 1));
   };
@@ -100,26 +110,64 @@ export const OrderIntakeModule: React.FC = () => {
   const updateLine = (id: string, updates: Partial<ProductLineInput>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
 
+  const onSelectProduct = (lineId: string, prodName: string) => {
+    const cat = products.find((p) => p.productName === prodName);
+    if (cat) {
+      const mats: MaterialInput[] = (cat.defaultMaterials || []).map((m, idx) => ({
+        id: `mat-${lineId}-${idx}-${Date.now()}`,
+        itemCode: m.itemCode,
+        description: m.description,
+        qty: (m as any).qty || 1,
+        supplierName: m.supplierName,
+        leadTimeDays: m.leadTimeDays,
+        isCriticalPath: m.isCriticalPath
+      }));
+      updateLine(lineId, {
+        selectedProduct: prodName,
+        customCategory: cat.category,
+        materials: mats
+      });
+    } else {
+      updateLine(lineId, { selectedProduct: prodName, materials: [] });
+    }
+  };
+
   const addMaterial = (lineId: string) =>
     setLines((prev) =>
-      prev.map((l) =>
-        l.id !== lineId
-          ? l
-          : {
-              ...l,
-              materials: [
-                ...l.materials,
-                { id: `mat-${Date.now()}`, itemCode: "", description: "", qty: 1, supplierName: "", leadTimeDays: 14, isCriticalPath: false },
-              ],
-            }
-      )
+      prev.map((l) => {
+        if (l.id !== lineId) return l;
+        const newMats = [
+          ...l.materials,
+          { id: `mat-${Date.now()}`, itemCode: "", description: "", qty: 1, supplierName: "", leadTimeDays: 14, isCriticalPath: false },
+        ];
+        const maxLead = Math.max(...newMats.map(m => Number(m.leadTimeDays) || 0));
+        return {
+          ...l,
+          materials: newMats.map(m => ({
+            ...m,
+            isCriticalPath: (Number(m.leadTimeDays) || 0) === maxLead
+          }))
+        };
+      })
     );
 
   const updateMaterial = (lineId: string, matId: string, updates: Partial<MaterialInput>) =>
     setLines((prev) =>
-      prev.map((l) =>
-        l.id !== lineId ? l : { ...l, materials: l.materials.map((m) => (m.id === matId ? { ...m, ...updates } : m)) }
-      )
+      prev.map((l) => {
+        if (l.id !== lineId) return l;
+        const newMats = l.materials.map((m) => (m.id === matId ? { ...m, ...updates } : m));
+        if ('leadTimeDays' in updates && !('isCriticalPath' in updates)) {
+          const maxLead = Math.max(...newMats.map(m => Number(m.leadTimeDays) || 0));
+          return {
+            ...l,
+            materials: newMats.map(m => ({
+              ...m,
+              isCriticalPath: (Number(m.leadTimeDays) || 0) === maxLead
+            }))
+          };
+        }
+        return { ...l, materials: newMats };
+      })
     );
 
   const removeMaterial = (lineId: string, matId: string) =>
@@ -486,7 +534,7 @@ export const OrderIntakeModule: React.FC = () => {
                             <>
                               <div>
                                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Select Product *</label>
-                                <select value={l.selectedProduct} onChange={(e) => updateLine(l.id, { selectedProduct: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                                <select value={l.selectedProduct} onChange={(e) => onSelectProduct(l.id, e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
                                   <option value="">Select a product</option>
                                   {products.map((p) => (
                                     <option key={p.id} value={p.productName}>{p.productName} ({p.totalLeadTimeDays}d)</option>
@@ -565,6 +613,22 @@ export const OrderIntakeModule: React.FC = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Line Lead Time Calculation Box */}
+                        {(() => {
+                          const { matLead, mfgLead, totalLead } = getLineLeadTime(l);
+                          return (
+                            <div className="flex items-center justify-between px-3.5 py-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs font-mono text-emerald-900">
+                              <span className="flex items-center gap-1.5 font-bold">
+                                <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                                Product Line Lead Time: {totalLead} Days ({Math.ceil(totalLead / 7)} Weeks)
+                              </span>
+                              <span className="text-[11px] text-emerald-800">
+                                Critical RM: <strong>{matLead}d</strong> + Manufacturing: <strong>{mfgLead}d</strong>
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}

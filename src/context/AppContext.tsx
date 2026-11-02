@@ -2820,6 +2820,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: newPrd.category || 'High-Pressure Control Valves',
       designType: newPrd.designType || 'Existing Design',
       totalLeadTimeDays: newPrd.totalLeadTimeDays || 45,
+      manufacturingLeadTimeDays: newPrd.manufacturingLeadTimeDays,
       description: newPrd.description || '',
       defaultMaterials: newPrd.defaultMaterials || [],
       createdAt: new Date().toISOString()

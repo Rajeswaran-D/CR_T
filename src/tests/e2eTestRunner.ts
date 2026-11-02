@@ -4,11 +4,12 @@ import {
   recalculateProductLine, 
   validateEventDate,
   getMilestoneRevisedDates,
-  buildTemplateSchedule
+  buildTemplateSchedule,
+  calculateProductLeadTime
 } from '../services/calculationEngine.ts';
 import { getPOManufacturingStatus } from '../utils/statusUtils.ts';
 import { extractDelayFlow } from '../components/common/DelayAnalysisFlow.tsx';
-import type { PurchaseOrder, ProductLine, Milestone } from '../types/index.ts';
+import type { PurchaseOrder, ProductLine, Milestone, MaterialItem } from '../types/index.ts';
 
 const cascadeNextMilestoneStart = (
   msList: Milestone[],
@@ -2087,6 +2088,69 @@ const po19: PurchaseOrder = {
 
 const mfgStatus19 = getPOManufacturingStatus(po19);
 assert(mfgStatus19.delayDays === 3, `PO manufacturing status delayDays recovers from 5d to 3d (got ${mfgStatus19.delayDays})`);
+
+// ============================================================================
+// GROUP 20: Product Master Material-Based Lead Time & Product Line Baseline
+// ============================================================================
+console.log('\n📋 GROUP 20: Product Master Material-Based Lead Time & Product Line Baseline');
+
+{
+  // Test 1: Calculate product lead time from raw materials
+  const initialMaterials = [
+    { leadTimeDays: 14, isCriticalPath: false },
+    { leadTimeDays: 28, isCriticalPath: true }
+  ];
+  const calc1 = calculateProductLeadTime({
+    materials: initialMaterials,
+    manufacturingLeadTimeDays: 24,
+    designType: 'Existing Design'
+  });
+  assert(calc1.criticalMaterialLeadTimeDays === 28, `Critical material lead time is 28d (got ${calc1.criticalMaterialLeadTimeDays})`);
+  assert(calc1.manufacturingLeadTimeDays === 24, `Manufacturing duration is 24d (got ${calc1.manufacturingLeadTimeDays})`);
+  assert(calc1.totalLeadTimeDays === 52, `Total product lead time is 52d (got ${calc1.totalLeadTimeDays})`);
+
+  // Test 2: Adding a new raw material with a particular lead time (e.g. 45 days)
+  const expandedMaterials = [
+    ...initialMaterials,
+    { leadTimeDays: 45, isCriticalPath: false }
+  ];
+  const calc2 = calculateProductLeadTime({
+    materials: expandedMaterials,
+    manufacturingLeadTimeDays: 24,
+    designType: 'Existing Design'
+  });
+  assert(calc2.criticalMaterialLeadTimeDays === 45, `Adding 45d material recalculates critical material lead time to 45d (got ${calc2.criticalMaterialLeadTimeDays})`);
+  assert(calc2.totalLeadTimeDays === 69, `Total product lead time recalculates to 69d (got ${calc2.totalLeadTimeDays})`);
+
+  // Test 3: Product line baseline milestones calculated based on product line lead time
+  const lineMaterials: MaterialItem[] = [
+    {
+      id: 'mat-test-1',
+      itemCode: 'MAT-BODY-SPECIAL',
+      description: 'Forged Body Alloy',
+      qty: 1,
+      unit: 'Pcs',
+      supplierName: 'Specialty Forge',
+      leadTimeDays: 45,
+      isCriticalPath: true,
+      inspectionResult: 'Pending'
+    }
+  ];
+  const lineMilestones = buildTemplateSchedule({
+    designType: 'Existing Design',
+    materials: lineMaterials,
+    startDate: '2026-09-01',
+    lineId: 'line-test-20'
+  });
+
+  const stage7 = lineMilestones.find(m => m.key === 'material_receipt');
+  assert(Boolean(stage7), 'Stage 7 (Material Receipt) exists in milestone chain');
+  assert(stage7?.committedDurationDays === 45, `Stage 7 committed baseline duration strictly reflects the 45d raw material lead time (got ${stage7?.committedDurationDays})`);
+  
+  const stage8 = lineMilestones.find(m => m.key === 'machining');
+  assert(Boolean(stage8), 'Stage 8 (Machining) exists in milestone chain');
+  assert(stage8?.committedBaselineStartDate === addDays(stage7?.committedBaselineEndDate!, 1), 'Stage 8 baseline start chains directly following Stage 7 baseline end');
+}
 
 console.log('\n================================================================');
 const successRate = totalTests === 0 ? 0 : Math.round((passedTests / totalTests) * 100);

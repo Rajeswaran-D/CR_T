@@ -357,12 +357,15 @@ export interface ProductMasterItem {
   designType: DesignType;
   totalLeadTimeDays: number;
   description?: string;
+  manufacturingLeadTimeDays?: number;
   defaultMaterials?: {
     itemCode: string;
     description: string;
     supplierName: string;
     leadTimeDays: number;
     isCriticalPath: boolean;
+    qty?: number;
+    unit?: string;
   }[];
   createdAt: string;
 }

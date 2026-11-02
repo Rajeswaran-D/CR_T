@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Package, 
@@ -11,15 +11,21 @@ import {
   HelpCircle,
   Edit3,
   Trash2,
-  Lock
+  Lock,
+  Calculator,
+  RefreshCw,
+  Clock,
+  Check
 } from 'lucide-react';
-import type { ProductMasterItem } from '../../types';
+import type { ProductMasterItem, DesignType } from '../../types';
 
 interface MaterialFormItem {
   id: string;
   itemCode: string;
   description: string;
   supplierName: string;
+  qty: number;
+  unit: string;
   leadTimeValue: number;
   leadTimeUnit: 'Days' | 'Weeks';
   isCriticalPath: boolean;
@@ -41,8 +47,17 @@ export const ProductCatalogModule: React.FC = () => {
   const [productCode, setProductCode] = useState('');
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('High-Pressure Control Valves');
+  const [customCategory, setCustomCategory] = useState('');
+  const [isCustomCat, setIsCustomCat] = useState(false);
+  const [designType, setDesignType] = useState<DesignType>('Existing Design');
   
-  // Lead time state with Days/Weeks unit support
+  // Manufacturing / Shop-Floor Processing Duration (days)
+  const [manufacturingDays, setManufacturingDays] = useState(24);
+
+  // Auto-calculation toggle state
+  const [isAutoCalc, setIsAutoCalc] = useState(true);
+
+  // Total lead time state with Days/Weeks unit support
   const [leadTimeValue, setLeadTimeValue] = useState(6);
   const [leadTimeUnit, setLeadTimeUnit] = useState<'Days' | 'Weeks'>('Weeks');
 
@@ -55,13 +70,22 @@ export const ProductCatalogModule: React.FC = () => {
       itemCode: '',
       description: '',
       supplierName: '',
+      qty: 1,
+      unit: 'Pcs',
       leadTimeValue: 3,
       leadTimeUnit: 'Weeks',
       isCriticalPath: true
     }
   ]);
 
-  const categories = ['All', 'High-Pressure Control Valves', 'Electromagnetic Flowmeters', 'Actuators & Controls'];
+  const standardCategories = [
+    'High-Pressure Control Valves',
+    'Electromagnetic Flowmeters',
+    'Actuators & Controls',
+    'Standard Flow Valves & Systems'
+  ];
+
+  const categories = ['All', ...standardCategories];
 
   const formatLeadTime = (days: number): string => {
     if (days >= 7 && days % 7 === 0) {
@@ -73,6 +97,41 @@ export const ProductCatalogModule: React.FC = () => {
       return `${w} Weeks (${days} Days)`;
     }
     return `${days} Days`;
+  };
+
+  // Convert material lead time to days
+  const getMaterialDays = (m: MaterialFormItem): number => {
+    const val = Number(m.leadTimeValue) || 1;
+    return m.leadTimeUnit === 'Weeks' ? val * 7 : val;
+  };
+
+  // Dynamic calculation of critical path material lead time
+  const maxMatLeadDays = materials.length > 0
+    ? Math.max(...materials.map(getMaterialDays), 1)
+    : 14;
+
+  // Total calculated days = Critical Material Lead Time + Manufacturing/Assembly Lead Time
+  const calculatedTotalDays = Math.max(1, maxMatLeadDays + Math.max(0, Number(manufacturingDays) || 0));
+
+  // Auto-sync total lead time when materials or manufacturing duration changes
+  useEffect(() => {
+    if (!isAutoCalc) return;
+    if (leadTimeUnit === 'Weeks') {
+      const w = Number((calculatedTotalDays / 7).toFixed(1));
+      setLeadTimeValue(w);
+    } else {
+      setLeadTimeValue(calculatedTotalDays);
+    }
+  }, [calculatedTotalDays, isAutoCalc, leadTimeUnit]);
+
+  // When designType changes, adjust default manufacturing processing days if untouched
+  const handleDesignTypeChange = (newType: DesignType) => {
+    setDesignType(newType);
+    if (newType === 'New Design' && manufacturingDays === 24) {
+      setManufacturingDays(45);
+    } else if (newType === 'Existing Design' && manufacturingDays === 45) {
+      setManufacturingDays(24);
+    }
   };
 
   const filteredProducts = products.filter(p => {
@@ -88,6 +147,11 @@ export const ProductCatalogModule: React.FC = () => {
     setProductCode('');
     setProductName('');
     setCategory('High-Pressure Control Valves');
+    setCustomCategory('');
+    setIsCustomCat(false);
+    setDesignType('Existing Design');
+    setManufacturingDays(24);
+    setIsAutoCalc(true);
     setLeadTimeValue(6);
     setLeadTimeUnit('Weeks');
     setDescription('');
@@ -97,6 +161,8 @@ export const ProductCatalogModule: React.FC = () => {
         itemCode: '',
         description: '',
         supplierName: '',
+        qty: 1,
+        unit: 'Pcs',
         leadTimeValue: 3,
         leadTimeUnit: 'Weeks',
         isCriticalPath: true
@@ -105,39 +171,62 @@ export const ProductCatalogModule: React.FC = () => {
     setErrorMsg('');
   };
 
+  const syncCriticalPathFlag = (updated: MaterialFormItem[]) => {
+    const maxDays = Math.max(...updated.map(getMaterialDays), 1);
+    return updated.map(m => ({
+      ...m,
+      isCriticalPath: getMaterialDays(m) === maxDays
+    }));
+  };
+
   const handleAddMaterial = () => {
-    setMaterials(prev => [
-      ...prev,
-      {
-        id: `mat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        itemCode: '',
-        description: '',
-        supplierName: '',
-        leadTimeValue: 14,
-        leadTimeUnit: 'Days',
-        isCriticalPath: false
-      }
-    ]);
+    setMaterials(prev => {
+      const next: MaterialFormItem[] = [
+        ...prev,
+        {
+          id: `mat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          itemCode: '',
+          description: '',
+          supplierName: '',
+          qty: 1,
+          unit: 'Pcs',
+          leadTimeValue: 14,
+          leadTimeUnit: 'Days',
+          isCriticalPath: false
+        }
+      ];
+      return syncCriticalPathFlag(next);
+    });
   };
 
   const handleRemoveMaterial = (id: string) => {
     if (materials.length <= 1) {
-      setMaterials([{
-        id: `mat-${Date.now()}`,
-        itemCode: '',
-        description: '',
-        supplierName: '',
-        leadTimeValue: 14,
-        leadTimeUnit: 'Days',
-        isCriticalPath: true
-      }]);
+      setMaterials([
+        {
+          id: `mat-${Date.now()}`,
+          itemCode: '',
+          description: '',
+          supplierName: '',
+          qty: 1,
+          unit: 'Pcs',
+          leadTimeValue: 14,
+          leadTimeUnit: 'Days',
+          isCriticalPath: true
+        }
+      ]);
       return;
     }
-    setMaterials(prev => prev.filter(m => m.id !== id));
+    setMaterials(prev => syncCriticalPathFlag(prev.filter(m => m.id !== id)));
   };
 
   const handleMaterialChange = (id: string, field: keyof MaterialFormItem, value: any) => {
-    setMaterials(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
+    setMaterials(prev => {
+      const updated = prev.map(m => m.id === id ? { ...m, [field]: value } : m);
+      if (field === 'leadTimeValue' || field === 'leadTimeUnit') {
+        return syncCriticalPathFlag(updated);
+      }
+      return updated;
+    });
   };
 
   const openAddModal = () => {
@@ -150,8 +239,54 @@ export const ProductCatalogModule: React.FC = () => {
     setEditingProduct(prd);
     setProductCode(prd.productCode);
     setProductName(prd.productName);
-    setCategory(prd.category);
     
+    if (standardCategories.includes(prd.category)) {
+      setCategory(prd.category);
+      setIsCustomCat(false);
+    } else {
+      setCategory('CUSTOM');
+      setCustomCategory(prd.category);
+      setIsCustomCat(true);
+    }
+
+    setDesignType(prd.designType || 'Existing Design');
+    
+    // Set materials list
+    let mats: MaterialFormItem[] = [];
+    if (prd.defaultMaterials && prd.defaultMaterials.length > 0) {
+      mats = prd.defaultMaterials.map((m, idx) => ({
+        id: `mat-${idx}-${Date.now()}`,
+        itemCode: m.itemCode,
+        description: m.description,
+        supplierName: m.supplierName,
+        qty: m.qty || 1,
+        unit: m.unit || 'Pcs',
+        leadTimeValue: m.leadTimeDays % 7 === 0 ? m.leadTimeDays / 7 : m.leadTimeDays,
+        leadTimeUnit: m.leadTimeDays % 7 === 0 ? 'Weeks' : 'Days',
+        isCriticalPath: Boolean(m.isCriticalPath)
+      }));
+    } else {
+      mats = [{
+        id: `mat-${Date.now()}`,
+        itemCode: '',
+        description: '',
+        supplierName: '',
+        qty: 1,
+        unit: 'Pcs',
+        leadTimeValue: 3,
+        leadTimeUnit: 'Weeks',
+        isCriticalPath: true
+      }];
+    }
+    setMaterials(mats);
+
+    // Calculate or restore manufacturing duration
+    const matMaxDays = Math.max(...mats.map(m => m.leadTimeUnit === 'Weeks' ? m.leadTimeValue * 7 : m.leadTimeValue), 14);
+    const restoredMfg = typeof prd.manufacturingLeadTimeDays === 'number'
+      ? prd.manufacturingLeadTimeDays
+      : Math.max(1, prd.totalLeadTimeDays - matMaxDays);
+    setManufacturingDays(restoredMfg);
+
     // Set lead time
     if (prd.totalLeadTimeDays % 7 === 0) {
       setLeadTimeValue(prd.totalLeadTimeDays / 7);
@@ -162,29 +297,7 @@ export const ProductCatalogModule: React.FC = () => {
     }
 
     setDescription(prd.description || '');
-
-    // Set materials list
-    if (prd.defaultMaterials && prd.defaultMaterials.length > 0) {
-      setMaterials(prd.defaultMaterials.map((m, idx) => ({
-        id: `mat-${idx}-${Date.now()}`,
-        itemCode: m.itemCode,
-        description: m.description,
-        supplierName: m.supplierName,
-        leadTimeValue: m.leadTimeDays % 7 === 0 ? m.leadTimeDays / 7 : m.leadTimeDays,
-        leadTimeUnit: m.leadTimeDays % 7 === 0 ? 'Weeks' : 'Days',
-        isCriticalPath: Boolean(m.isCriticalPath)
-      })));
-    } else {
-      setMaterials([{
-        id: `mat-${Date.now()}`,
-        itemCode: '',
-        description: '',
-        supplierName: '',
-        leadTimeValue: 3,
-        leadTimeUnit: 'Weeks',
-        isCriticalPath: true
-      }]);
-    }
+    setIsAutoCalc(true);
   };
 
   const buildMaterialsPayload = () => {
@@ -195,6 +308,8 @@ export const ProductCatalogModule: React.FC = () => {
         itemCode: m.itemCode.trim(),
         description: m.description.trim() || `${productName.trim()} Raw Part`,
         supplierName: m.supplierName.trim() || 'Approved Supplier',
+        qty: Math.max(1, Number(m.qty) || 1),
+        unit: m.unit || 'Pcs',
         leadTimeDays: Math.max(1, days),
         isCriticalPath: m.isCriticalPath
       };
@@ -227,6 +342,12 @@ export const ProductCatalogModule: React.FC = () => {
       return;
     }
 
+    const effectiveCategory = isCustomCat ? customCategory.trim() : category;
+    if (!effectiveCategory) {
+      setErrorMsg('Product Category is required.');
+      return;
+    }
+
     // Check duplicate code
     if (products.some(p => p.productCode.toLowerCase() === productCode.trim().toLowerCase())) {
       setErrorMsg(`Product code '${productCode.trim()}' already exists in catalog.`);
@@ -240,15 +361,16 @@ export const ProductCatalogModule: React.FC = () => {
     const res = createProduct({
       productCode: productCode.trim(),
       productName: productName.trim(),
-      category,
-      designType: 'Existing Design',
-      totalLeadTimeDays: totalDays || 42,
+      category: effectiveCategory,
+      designType,
+      totalLeadTimeDays: Math.round(totalDays) || 42,
+      manufacturingLeadTimeDays: Number(manufacturingDays) || 24,
       description: description.trim(),
       defaultMaterials
     });
 
     if (res.success) {
-      setSuccessMsg(`Product '${productName}' with ${defaultMaterials.length} raw material(s) added successfully!`);
+      setSuccessMsg(`Product '${productName}' with ${defaultMaterials.length} raw material(s) and ${Math.round(totalDays)}d lead time registered successfully!`);
       setShowAddModal(false);
       resetForm();
       setTimeout(() => setSuccessMsg(''), 5000);
@@ -268,6 +390,12 @@ export const ProductCatalogModule: React.FC = () => {
       return;
     }
 
+    const effectiveCategory = isCustomCat ? customCategory.trim() : category;
+    if (!effectiveCategory) {
+      setErrorMsg('Product Category is required.');
+      return;
+    }
+
     // Check duplicate code against other products
     if (products.some(p => p.id !== editingProduct.id && p.productCode.toLowerCase() === productCode.trim().toLowerCase())) {
       setErrorMsg(`Product code '${productCode.trim()}' already exists on another product.`);
@@ -281,14 +409,16 @@ export const ProductCatalogModule: React.FC = () => {
     const res = updateProduct(editingProduct.id, {
       productCode: productCode.trim(),
       productName: productName.trim(),
-      category,
-      totalLeadTimeDays: totalDays || 42,
+      category: effectiveCategory,
+      designType,
+      totalLeadTimeDays: Math.round(totalDays) || 42,
+      manufacturingLeadTimeDays: Number(manufacturingDays) || 24,
       description: description.trim(),
       defaultMaterials
     });
 
     if (res.success) {
-      setSuccessMsg(`Product '${productName}' updated with ${defaultMaterials.length} raw material(s) successfully!`);
+      setSuccessMsg(`Product '${productName}' updated with ${defaultMaterials.length} raw material(s) and ${Math.round(totalDays)}d lead time successfully!`);
       setEditingProduct(null);
       resetForm();
       setTimeout(() => setSuccessMsg(''), 5000);
@@ -319,7 +449,7 @@ export const ProductCatalogModule: React.FC = () => {
             <Package className="w-4 h-4 text-emerald-700" /> Raw Materials Bill of Materials ({materials.length})
           </h4>
           <p className="text-[10px] text-slate-500 mt-0.5">
-            Add 1, 2, 3 or more raw materials required for this product.
+            Define item codes, descriptions, suppliers, required quantities, units, and supplier procurement lead times.
           </p>
         </div>
         <button
@@ -334,19 +464,24 @@ export const ProductCatalogModule: React.FC = () => {
       <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-lg text-[11px] text-emerald-950 flex items-start gap-2">
         <HelpCircle className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
         <div>
-          <span className="font-bold">Critical Path:</span> The raw material item that takes the longest lead time and gates the shop-floor machining start.
+          <span className="font-bold">Critical Path Rule:</span> The raw material item with the longest procurement lead time governs the shop-floor start date. Adding or changing a material's lead time automatically recalculates the product's total lead time.
         </div>
       </div>
 
-      <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
         {materials.map((mat, idx) => (
-          <div key={mat.id} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+          <div key={mat.id} className={`p-3.5 bg-white border rounded-xl space-y-2.5 shadow-2xs transition-colors ${mat.isCriticalPath ? 'border-rose-300 ring-1 ring-rose-200' : 'border-slate-200'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-slate-800 text-xs font-mono">Raw Material #{idx + 1}</span>
-                {mat.isCriticalPath && (
-                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 font-mono text-[9px] font-bold border border-rose-200">
-                    CRITICAL PATH
+                {mat.isCriticalPath ? (
+                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 font-mono text-[9px] font-bold border border-rose-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                    CRITICAL PATH ({getMaterialDays(mat)} Days)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[9px]">
+                    Sub-component ({getMaterialDays(mat)} Days)
                   </span>
                 )}
               </div>
@@ -362,8 +497,8 @@ export const ProductCatalogModule: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
+            <div className="grid grid-cols-12 gap-3">
+              <div className="col-span-4">
                 <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Item Code *</label>
                 <input
                   type="text"
@@ -374,7 +509,7 @@ export const ProductCatalogModule: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="col-span-5">
                 <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Supplier Name</label>
                 <input
                   type="text"
@@ -384,10 +519,34 @@ export const ProductCatalogModule: React.FC = () => {
                   className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
+
+              <div className="col-span-3">
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Qty & Unit</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={mat.qty}
+                    onChange={(e) => handleMaterialChange(mat.id, 'qty', Number(e.target.value) || 1)}
+                    className="w-14 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-center"
+                  />
+                  <select
+                    value={mat.unit}
+                    onChange={(e) => handleMaterialChange(mat.id, 'unit', e.target.value)}
+                    className="flex-1 px-1.5 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-700"
+                  >
+                    <option value="Pcs">Pcs</option>
+                    <option value="Kg">Kg</option>
+                    <option value="Mtr">Mtr</option>
+                    <option value="Set">Set</option>
+                    <option value="Nos">Nos</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
+            <div className="grid grid-cols-12 gap-3">
+              <div className="col-span-6">
                 <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Material Description</label>
                 <input
                   type="text"
@@ -398,8 +557,8 @@ export const ProductCatalogModule: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Lead Time & Critical Status</label>
+              <div className="col-span-6">
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Procurement Lead Time</label>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="number"
@@ -417,14 +576,14 @@ export const ProductCatalogModule: React.FC = () => {
                     <option value="Weeks">Weeks</option>
                   </select>
 
-                  <label className="flex items-center gap-1 text-[11px] font-bold text-rose-800 shrink-0 cursor-pointer ml-auto bg-rose-50/80 px-2 py-1 rounded border border-rose-200">
+                  <label className={`flex items-center gap-1 text-[11px] font-bold shrink-0 cursor-pointer ml-auto px-2 py-1 rounded border transition-colors ${mat.isCriticalPath ? 'bg-rose-50 text-rose-800 border-rose-300' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
                     <input
                       type="checkbox"
                       checked={mat.isCriticalPath}
                       onChange={(e) => handleMaterialChange(mat.id, 'isCriticalPath', e.target.checked)}
                       className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                     />
-                    Critical
+                    Critical Path
                   </label>
                 </div>
               </div>
@@ -432,6 +591,64 @@ export const ProductCatalogModule: React.FC = () => {
           </div>
         ))}
       </div>
+    </div>
+  );
+
+  // Live Lead Time Dynamic Calculation Breakdown Box
+  const renderCalculationBreakdown = () => (
+    <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 rounded-xl space-y-2.5 shadow-2xs">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Calculator className="w-4 h-4 text-emerald-700" />
+          <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wide">
+            Dynamic Lead Time Calculation
+          </h4>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsAutoCalc(true);
+              if (leadTimeUnit === 'Weeks') {
+                setLeadTimeValue(Number((calculatedTotalDays / 7).toFixed(1)));
+              } else {
+                setLeadTimeValue(calculatedTotalDays);
+              }
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+              isAutoCalc 
+                ? 'bg-emerald-700 text-white shadow-2xs' 
+                : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            {isAutoCalc ? <Check className="w-3 h-3 text-emerald-200" /> : <RefreshCw className="w-3 h-3 text-slate-500" />}
+            {isAutoCalc ? 'Auto-Calculated from BOM' : 'Re-sync with BOM'}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 pt-1 text-center font-mono">
+        <div className="bg-white/80 border border-rose-200 rounded-lg p-2.5">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Critical Material Lead Time</div>
+          <div className="text-sm font-black text-rose-700 mt-0.5">{maxMatLeadDays} Days</div>
+          <div className="text-[10px] text-slate-400">({(maxMatLeadDays / 7).toFixed(1)} Weeks)</div>
+        </div>
+
+        <div className="bg-white/80 border border-blue-200 rounded-lg p-2.5">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Manufacturing & Testing</div>
+          <div className="text-sm font-black text-blue-700 mt-0.5">{manufacturingDays} Days</div>
+          <div className="text-[10px] text-slate-400">({(manufacturingDays / 7).toFixed(1)} Weeks)</div>
+        </div>
+
+        <div className="bg-white/90 border border-emerald-300 rounded-lg p-2.5 ring-1 ring-emerald-300">
+          <div className="text-[10px] text-emerald-800 font-bold uppercase">Calculated Product Lead Time</div>
+          <div className="text-sm font-black text-emerald-800 mt-0.5">{calculatedTotalDays} Days</div>
+          <div className="text-[10px] text-emerald-600">({(calculatedTotalDays / 7).toFixed(1)} Weeks)</div>
+        </div>
+      </div>
+      <p className="text-[10px] text-slate-600">
+        Formula: <span className="font-semibold text-rose-800">{maxMatLeadDays}d (Material GRN)</span> + <span className="font-semibold text-blue-800">{manufacturingDays}d (Machining, Assembly, QC, Painting, TRN, Dispatch)</span> = <span className="font-bold text-emerald-900">{calculatedTotalDays} Days</span> baseline duration.
+      </p>
     </div>
   );
 
@@ -452,7 +669,7 @@ export const ProductCatalogModule: React.FC = () => {
           </div>
           <h1 className="text-2xl font-black tracking-tight">Product Master Catalog</h1>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            Manage factory product lines, multi-part raw material BOMs, standard lead times (in Weeks/Days), and critical path procurement schedules.
+            Manage factory product lines, multi-part raw material BOMs, standard lead times (in Weeks/Days), and dynamic critical path procurement schedules.
           </p>
         </div>
 
@@ -526,6 +743,13 @@ export const ProductCatalogModule: React.FC = () => {
                     <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono text-[10px]">
                       {prd.category}
                     </span>
+                    <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
+                      prd.designType === 'New Design'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      {prd.designType || 'Existing Design'}
+                    </span>
                   </div>
                   <p className="text-slate-600 text-xs mt-1 line-clamp-1" title={prd.description || 'No description provided'}>
                     {prd.description || 'Standard valve manufacturing line.'}
@@ -536,10 +760,13 @@ export const ProductCatalogModule: React.FC = () => {
                 <div className="flex items-center gap-6 shrink-0 font-mono">
                   <div className="text-left sm:text-right">
                     <div className="font-bold text-slate-900 text-xs">{formatLeadTime(prd.totalLeadTimeDays)}</div>
-                    <div className="text-[10px] text-slate-400">Total Lead Time</div>
+                    <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span>Mfg: {prd.manufacturingLeadTimeDays ?? 24}d</span>
+                    </div>
                   </div>
 
-                  <div className="text-left sm:text-right max-w-[280px]">
+                  <div className="text-left sm:text-right max-w-[320px]">
                     <div className="flex items-center gap-1.5 flex-wrap justify-start sm:justify-end">
                       {prd.defaultMaterials && prd.defaultMaterials.length > 0 ? (
                         prd.defaultMaterials.map((mat, mIdx) => (
@@ -550,7 +777,7 @@ export const ProductCatalogModule: React.FC = () => {
                                 ? 'bg-rose-50 border-rose-200 text-rose-800 font-bold' 
                                 : 'bg-slate-50 border-slate-200 text-slate-700'
                             }`}
-                            title={`${mat.description} (${mat.supplierName}) - ${mat.leadTimeDays}d`}
+                            title={`${mat.description} (${mat.supplierName}) - Qty: ${mat.qty || 1} ${mat.unit || 'Pcs'} - Lead: ${mat.leadTimeDays}d`}
                           >
                             {mat.itemCode} ({mat.leadTimeDays}d)
                           </span>
@@ -559,7 +786,7 @@ export const ProductCatalogModule: React.FC = () => {
                         <span className="text-slate-400 text-[10px]">Standard Billet</span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{prd.defaultMaterials?.length || 0} Raw Material(s)</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{prd.defaultMaterials?.length || 0} Raw Material(s) BOM</div>
                   </div>
                 </div>
 
@@ -601,7 +828,7 @@ export const ProductCatalogModule: React.FC = () => {
       {/* ADD NEW PRODUCT MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
             
             <div className="bg-slate-50 p-5 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -610,7 +837,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="font-bold text-slate-900 text-base">Add Product to Catalog</h2>
-                  <p className="text-xs text-slate-500">Register a new product design with multiple raw material specifications.</p>
+                  <p className="text-xs text-slate-500">Register a new product design with fully connected BOM specifications and dynamic lead time calculation.</p>
                 </div>
               </div>
 
@@ -627,6 +854,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
               )}
 
+              {/* Product Code & Product Name */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="font-bold text-slate-900 block mb-1">Product Code *</label>
@@ -651,30 +879,89 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
               </div>
 
+              {/* Category & Design Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bold text-slate-900 block mb-1">Category</label>
+                  <label className="font-bold text-slate-900 block mb-1">Category *</label>
                   <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    value={isCustomCat ? 'CUSTOM' : category}
+                    onChange={(e) => {
+                      if (e.target.value === 'CUSTOM') {
+                        setIsCustomCat(true);
+                      } else {
+                        setIsCustomCat(false);
+                        setCategory(e.target.value);
+                      }
+                    }}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
                   >
-                    <option value="High-Pressure Control Valves">High-Pressure Control Valves</option>
-                    <option value="Electromagnetic Flowmeters">Electromagnetic Flowmeters</option>
-                    <option value="Actuators & Controls">Actuators & Controls</option>
+                    {standardCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="CUSTOM">+ Custom Category...</option>
                   </select>
+                  {isCustomCat && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom category name..."
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    />
+                  )}
                 </div>
 
-                {/* Lead time in Days or Weeks */}
                 <div>
-                  <label className="font-bold text-slate-900 block mb-1">Standard Lead Time</label>
+                  <label className="font-bold text-slate-900 block mb-1">Design Type *</label>
+                  <select
+                    value={designType}
+                    onChange={(e) => handleDesignTypeChange(e.target.value as DesignType)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer font-medium"
+                  >
+                    <option value="Existing Design">Existing Design (Standard Flow & Certified)</option>
+                    <option value="New Design">New Design (Requires Engineering & CORB/BOM Stage)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Manufacturing Duration & Standard Lead Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">
+                    Shop-Floor Manufacturing Duration (Days)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={manufacturingDays}
+                      onChange={(e) => setManufacturingDays(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono font-bold"
+                    />
+                    <span className="text-slate-500 font-bold text-xs shrink-0">Days</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    Machining, Assembly, QC, Painting, TRN & Dispatch time after raw material receipt.
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">
+                    Total Product Lead Time
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       min={1}
+                      step="any"
                       value={leadTimeValue}
-                      onChange={(e) => setLeadTimeValue(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono font-bold"
+                      onChange={(e) => {
+                        setIsAutoCalc(false);
+                        setLeadTimeValue(Number(e.target.value));
+                      }}
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono font-bold ${
+                        isAutoCalc ? 'bg-emerald-50/50 border-emerald-300 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
                     />
                     <select
                       value={leadTimeUnit}
@@ -686,13 +973,17 @@ export const ProductCatalogModule: React.FC = () => {
                     </select>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono mt-1">
-                    Equivalent to: {leadTimeUnit === 'Weeks' ? `${leadTimeValue * 7} Days` : `${(leadTimeValue / 7).toFixed(1)} Weeks`}
+                    Equivalent to: {leadTimeUnit === 'Weeks' ? `${Math.round(leadTimeValue * 7)} Days` : `${(leadTimeValue / 7).toFixed(1)} Weeks`}
                   </div>
                 </div>
               </div>
 
+              {/* Dynamic Calculation Breakdown */}
+              {renderCalculationBreakdown()}
+
+              {/* Description */}
               <div>
-                <label className="font-bold text-slate-900 block mb-1">Product Description / Specifications</label>
+                <label className="font-bold text-slate-900 block mb-1">Product Description / Engineering Specifications</label>
                 <textarea
                   rows={2}
                   placeholder="e.g. Duplex 2205 Castings, Class 1500, High Pressure Hydro tested."
@@ -705,7 +996,7 @@ export const ProductCatalogModule: React.FC = () => {
               {/* Multi-Raw Material Section */}
               {renderMaterialFields()}
 
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -715,7 +1006,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4 text-emerald-200" />
                   <span>Save to Product Catalog</span>
@@ -731,7 +1022,7 @@ export const ProductCatalogModule: React.FC = () => {
       {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
             
             <div className="bg-slate-50 p-5 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -740,7 +1031,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="font-bold text-slate-900 text-base">Edit Product Catalog Item</h2>
-                  <p className="text-xs text-slate-500">Update specifications, multi-part raw materials, and lead times.</p>
+                  <p className="text-xs text-slate-500">Update specifications, multi-part raw materials, and dynamic lead times.</p>
                 </div>
               </div>
 
@@ -757,6 +1048,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
               )}
 
+              {/* Product Code & Product Name */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="font-bold text-slate-900 block mb-1">Product Code *</label>
@@ -779,30 +1071,89 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
               </div>
 
+              {/* Category & Design Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bold text-slate-900 block mb-1">Category</label>
+                  <label className="font-bold text-slate-900 block mb-1">Category *</label>
                   <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    value={isCustomCat ? 'CUSTOM' : category}
+                    onChange={(e) => {
+                      if (e.target.value === 'CUSTOM') {
+                        setIsCustomCat(true);
+                      } else {
+                        setIsCustomCat(false);
+                        setCategory(e.target.value);
+                      }
+                    }}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
                   >
-                    <option value="High-Pressure Control Valves">High-Pressure Control Valves</option>
-                    <option value="Electromagnetic Flowmeters">Electromagnetic Flowmeters</option>
-                    <option value="Actuators & Controls">Actuators & Controls</option>
+                    {standardCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="CUSTOM">+ Custom Category...</option>
                   </select>
+                  {isCustomCat && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom category name..."
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    />
+                  )}
                 </div>
 
-                {/* Lead time in Days or Weeks */}
                 <div>
-                  <label className="font-bold text-slate-900 block mb-1">Standard Lead Time</label>
+                  <label className="font-bold text-slate-900 block mb-1">Design Type *</label>
+                  <select
+                    value={designType}
+                    onChange={(e) => handleDesignTypeChange(e.target.value as DesignType)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer font-medium"
+                  >
+                    <option value="Existing Design">Existing Design (Standard Flow & Certified)</option>
+                    <option value="New Design">New Design (Requires Engineering & CORB/BOM Stage)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Manufacturing Duration & Standard Lead Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">
+                    Shop-Floor Manufacturing Duration (Days)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={manufacturingDays}
+                      onChange={(e) => setManufacturingDays(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono font-bold"
+                    />
+                    <span className="text-slate-500 font-bold text-xs shrink-0">Days</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    Machining, Assembly, QC, Painting, TRN & Dispatch time after raw material receipt.
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">
+                    Total Product Lead Time
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       min={1}
+                      step="any"
                       value={leadTimeValue}
-                      onChange={(e) => setLeadTimeValue(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-mono font-bold"
+                      onChange={(e) => {
+                        setIsAutoCalc(false);
+                        setLeadTimeValue(Number(e.target.value));
+                      }}
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono font-bold ${
+                        isAutoCalc ? 'bg-emerald-50/50 border-emerald-300 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
                     />
                     <select
                       value={leadTimeUnit}
@@ -814,13 +1165,17 @@ export const ProductCatalogModule: React.FC = () => {
                     </select>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono mt-1">
-                    Equivalent to: {leadTimeUnit === 'Weeks' ? `${leadTimeValue * 7} Days` : `${(leadTimeValue / 7).toFixed(1)} Weeks`}
+                    Equivalent to: {leadTimeUnit === 'Weeks' ? `${Math.round(leadTimeValue * 7)} Days` : `${(leadTimeValue / 7).toFixed(1)} Weeks`}
                   </div>
                 </div>
               </div>
 
+              {/* Dynamic Calculation Breakdown */}
+              {renderCalculationBreakdown()}
+
+              {/* Description */}
               <div>
-                <label className="font-bold text-slate-900 block mb-1">Product Description / Specifications</label>
+                <label className="font-bold text-slate-900 block mb-1">Product Description / Engineering Specifications</label>
                 <textarea
                   rows={2}
                   value={description}
@@ -832,7 +1187,7 @@ export const ProductCatalogModule: React.FC = () => {
               {/* Multi-Raw Material Section */}
               {renderMaterialFields()}
 
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
@@ -842,7 +1197,7 @@ export const ProductCatalogModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4 text-emerald-200" />
                   <span>Update Product Details</span>
@@ -858,5 +1213,3 @@ export const ProductCatalogModule: React.FC = () => {
     </div>
   );
 };
-
-
