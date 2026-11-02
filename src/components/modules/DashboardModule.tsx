@@ -35,11 +35,19 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
   const isPMRole = activeRole === 'Project Manager (PM Baseline)';
   const isAdmin = activeRole === 'Project Management';
 
+  const [statusFilter, setStatusFilter] = useState<'all' | 'on_time' | 'delayed'>('all');
+
   // Filter current active orders (exclude fully closed, cancelled, and orders awaiting baseline approval)
   const activeOrders = purchaseOrders.filter(p => !p.isClosed && p.status !== 'Cancelled' && !p.isCancelled && p.status !== 'Baseline Pending');
   const pendingBaselineOrders = purchaseOrders.filter(p => !p.isClosed && p.status === 'Baseline Pending' && !p.isCancelled);
   const onTimeOrders = activeOrders.filter(p => !getPOManufacturingStatus(p).isDelayed);
   const delayedOrders = activeOrders.filter(p => getPOManufacturingStatus(p).isDelayed);
+
+  const displayedOrders = statusFilter === 'on_time'
+    ? onTimeOrders
+    : statusFilter === 'delayed'
+      ? delayedOrders
+      : activeOrders;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -106,48 +114,126 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
         </div>
       </div>
 
-      {/* Simplified Status Summary Cards */}
+      {/* Simplified Status Summary Cards with Click-to-Filter */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
+        <div 
+          onClick={() => setStatusFilter('all')}
+          className={`bg-white border p-6 rounded-2xl shadow-xs cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md ${
+            statusFilter === 'all'
+              ? 'border-slate-800 ring-2 ring-slate-800/80 bg-slate-50/50'
+              : 'border-slate-200 hover:border-slate-300'
+          }`}
+          title="Click to view all active orders"
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs mb-3 font-semibold">
             <span>Total Active Orders</span>
             <Layers className="w-4 h-4 text-emerald-700" />
           </div>
-          <div className="text-4xl font-extrabold text-slate-900 font-mono">{activeOrders.length}</div>
+          <div className="flex items-baseline justify-between">
+            <div className="text-4xl font-extrabold text-slate-900 font-mono">{activeOrders.length}</div>
+            {statusFilter === 'all' ? (
+              <span className="text-[10px] font-bold text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded-full font-mono">
+                Showing All
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold text-slate-400 hover:text-slate-700 font-mono">
+                Show All
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mt-2">Currently in shop-floor pipeline</p>
         </div>
 
-        <div className="bg-white border border-emerald-200/80 p-6 rounded-2xl shadow-xs bg-emerald-50/20">
+        <div 
+          onClick={() => setStatusFilter(prev => prev === 'on_time' ? 'all' : 'on_time')}
+          className={`bg-white border p-6 rounded-2xl shadow-xs cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md ${
+            statusFilter === 'on_time'
+              ? 'border-emerald-600 ring-2 ring-emerald-600/80 bg-emerald-50/70 shadow-emerald-100'
+              : 'border-emerald-200/80 bg-emerald-50/20 hover:border-emerald-400'
+          }`}
+          title={statusFilter === 'on_time' ? 'Click to show all orders' : 'Click to filter on-time orders only'}
+        >
           <div className="flex items-center justify-between text-emerald-800 text-xs mb-3 font-semibold">
-            <span>On Time Orders</span>
+            <span className="flex items-center gap-1.5">
+              <span>On Time Orders</span>
+              {statusFilter === 'on_time' && (
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+              )}
+            </span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-4xl font-extrabold text-emerald-700 font-mono">{onTimeOrders.length}</div>
+          <div className="flex items-baseline justify-between">
+            <div className="text-4xl font-extrabold text-emerald-700 font-mono">{onTimeOrders.length}</div>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+              statusFilter === 'on_time' ? 'bg-emerald-600 text-white' : 'bg-emerald-100/80 text-emerald-800'
+            }`}>
+              {statusFilter === 'on_time' ? '✓ Filter Active' : 'Click to filter'}
+            </span>
+          </div>
           <p className="text-xs text-emerald-600 font-medium mt-2">Meeting target deadlines</p>
         </div>
 
-        <div className="bg-white border border-rose-200/80 p-6 rounded-2xl shadow-xs bg-rose-50/20">
+        <div 
+          onClick={() => setStatusFilter(prev => prev === 'delayed' ? 'all' : 'delayed')}
+          className={`bg-white border p-6 rounded-2xl shadow-xs cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md ${
+            statusFilter === 'delayed'
+              ? 'border-rose-600 ring-2 ring-rose-600/80 bg-rose-50/70 shadow-rose-100'
+              : 'border-rose-200/80 bg-rose-50/20 hover:border-rose-400'
+          }`}
+          title={statusFilter === 'delayed' ? 'Click to show all orders' : 'Click to filter delayed orders only'}
+        >
           <div className="flex items-center justify-between text-rose-800 text-xs mb-3 font-semibold">
-            <span>Delayed Orders</span>
+            <span className="flex items-center gap-1.5">
+              <span>Delayed Orders</span>
+              {statusFilter === 'delayed' && (
+                <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+              )}
+            </span>
             <AlertTriangle className="w-4 h-4 text-rose-600" />
           </div>
-          <div className="text-4xl font-extrabold text-rose-700 font-mono">{delayedOrders.length}</div>
+          <div className="flex items-baseline justify-between">
+            <div className="text-4xl font-extrabold text-rose-700 font-mono">{delayedOrders.length}</div>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+              statusFilter === 'delayed' ? 'bg-rose-600 text-white' : 'bg-rose-100/80 text-rose-800'
+            }`}>
+              {statusFilter === 'delayed' ? '⚠ Filter Active' : 'Click to filter'}
+            </span>
+          </div>
           <p className="text-xs text-rose-600 font-medium mt-2">Requires schedule attention</p>
         </div>
       </div>
 
       {/* Current Active Orders Table */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
           <div>
-            <h2 className="font-bold text-base text-slate-900">Current Active Orders & Work Progress</h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="font-bold text-base text-slate-900">Current Active Orders & Work Progress</h2>
+              {statusFilter !== 'all' && (
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono border ${
+                  statusFilter === 'on_time'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-rose-100 text-rose-900 border-rose-300'
+                }`}>
+                  {statusFilter === 'on_time' ? `Filtered: On Time (${onTimeOrders.length})` : `Filtered: Delayed (${delayedOrders.length})`}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
               {isPMRole ? 'Use "Baseline Edit" to revise master timelines, or click "Details" to inspect stage progression.' : 'Click "Details" on any order to inspect shop-floor work or stage changes.'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {statusFilter !== 'all' && (
+              <button
+                onClick={() => setStatusFilter('all')}
+                className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+              >
+                Clear Filter (Show All {activeOrders.length})
+              </button>
+            )}
             <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold font-mono border border-emerald-200">
-              {activeOrders.length} Active
+              {displayedOrders.length} {statusFilter === 'all' ? 'Active' : 'Shown'}
             </span>
           </div>
         </div>
@@ -167,14 +253,40 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800">
-              {activeOrders.length === 0 ? (
+              {displayedOrders.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
-                    No active orders found. Click "+ Add New Order" above to create one.
+                    {statusFilter === 'delayed' ? (
+                      <div className="py-4">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                        <p className="font-bold text-slate-800 text-sm">No Delayed Orders</p>
+                        <p className="text-xs text-slate-500 mt-1">All active factory orders are running strictly on schedule according to approved baselines.</p>
+                        <button
+                          onClick={() => setStatusFilter('all')}
+                          className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer shadow-2xs"
+                        >
+                          Show All Orders ({activeOrders.length})
+                        </button>
+                      </div>
+                    ) : statusFilter === 'on_time' ? (
+                      <div className="py-4">
+                        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-2" />
+                        <p className="font-bold text-slate-800 text-sm">No On-Time Orders</p>
+                        <p className="text-xs text-slate-500 mt-1">All active factory orders are currently carrying delayed milestone variances.</p>
+                        <button
+                          onClick={() => setStatusFilter('all')}
+                          className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer shadow-2xs"
+                        >
+                          Show All Orders ({activeOrders.length})
+                        </button>
+                      </div>
+                    ) : (
+                      'No active orders found. Click "+ Add New Order" above to create one.'
+                    )}
                   </td>
                 </tr>
               ) : (
-                activeOrders.map((po) => {
+                displayedOrders.map((po) => {
                   const firstLine = po.productLines[0];
                   const statusSummary = getPOManufacturingStatus(po);
                   const deadline = po.revisedDeliveryDate || po.committedDeliveryDate;
