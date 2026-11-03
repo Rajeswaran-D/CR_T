@@ -64,6 +64,7 @@ export const OrderIntakeModule: React.FC = () => {
   const today = todayLocal();
   const [poStartDate, setPoStartDate] = useState(today);
   const [committedDeliveryDate, setCommittedDeliveryDate] = useState("");
+  const [isLd, setIsLd] = useState(false);
 
   const getLineLeadTime = (l: ProductLineInput) => {
     const cat = l.designType === "Existing Design" ? products.find((p) => p.productName === l.selectedProduct) : undefined;
@@ -100,6 +101,7 @@ export const OrderIntakeModule: React.FC = () => {
     setCustomerPoRef("");
     setBookedAmount("");
     setCommittedDeliveryDate("");
+    setIsLd(false);
     setLines([emptyLine()]);
     setCreatedPOId(null);
     setErrorMsg("");
@@ -290,6 +292,7 @@ export const OrderIntakeModule: React.FC = () => {
       bookedAmount: cleanAmount !== undefined && !isNaN(cleanAmount) ? cleanAmount : undefined,
       contractReviewRef: `CR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       committedDeliveryDate: committedDeliveryDate.trim() || undefined,
+      isLd,
       productLines: lines.map((l) => {
         const catalog = products.find((p) => p.productName === l.selectedProduct);
         return {
@@ -412,7 +415,7 @@ export const OrderIntakeModule: React.FC = () => {
                 )}
 
                 {/* Customer Info & Order Schedule Dates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1.5">Customer Name *</label>
                     <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="e.g. Petrobras Offshore Ltd." className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-white" />
@@ -495,6 +498,30 @@ export const OrderIntakeModule: React.FC = () => {
                       placeholder={deadline}
                       className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-white font-mono"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+                      <span>LD Clause</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                        isLd ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        {isLd ? 'Active' : 'Optional'}
+                      </span>
+                    </label>
+                    <label className={`flex items-center gap-2 px-3 py-2.5 border rounded-lg cursor-pointer transition-all ${
+                      isLd 
+                        ? 'border-amber-400 bg-amber-50/70 text-amber-950 ring-1 ring-amber-400 shadow-2xs' 
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={isLd}
+                        onChange={(e) => setIsLd(e.target.checked)}
+                        className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                      />
+                      <span className="text-xs font-bold select-none">LD</span>
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono truncate" title="Liquidated Damages penalty clause">Liquidated Damages</p>
                   </div>
                 </div>
 
@@ -793,6 +820,11 @@ export const OrderIntakeModule: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
                     <span className="font-mono font-bold text-amber-900 text-sm">{po.poNumber}</span>
+                    {po.isLd && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black font-mono tracking-wide bg-amber-500 text-slate-950 border border-amber-600 shadow-2xs" title="Liquidated Damages (LD) applicable">
+                        LD
+                      </span>
+                    )}
                     <span className="font-semibold text-slate-900 text-sm">{po.customerName}</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">Baseline Pending</span>
                   </div>
@@ -851,6 +883,11 @@ export const OrderIntakeModule: React.FC = () => {
                   <button onClick={() => setExpandedPO(isExpanded ? null : po.id)} className="w-full text-left px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <span className="font-mono font-bold text-emerald-800 text-sm">{po.poNumber}</span>
+                      {po.isLd && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black font-mono tracking-wide bg-amber-500 text-slate-950 border border-amber-600 shadow-2xs" title="Liquidated Damages (LD) applicable">
+                          LD
+                        </span>
+                      )}
                       <span className="font-semibold text-slate-900">{po.customerName}</span>
                       <span className="text-xs text-slate-500">{po.productLines.length} line{po.productLines.length !== 1 ? "s" : ""}</span>
                       {po.bookedAmount !== undefined && (

@@ -104,6 +104,11 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-extrabold text-slate-900 text-lg">{po.poNumber}</h2>
+                {po.isLd && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black font-mono tracking-wide bg-amber-500 text-slate-950 border border-amber-600 shadow-2xs" title="Liquidated Damages (LD) clause applicable">
+                    LD
+                  </span>
+                )}
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
                   po.status === 'Cancelled' || po.isCancelled ? 'bg-rose-100 border-rose-300 text-rose-800' :
                   po.isClosed ? (statusSummary.delayDays > 0 ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-800') :

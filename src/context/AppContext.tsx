@@ -1931,7 +1931,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedPOs = purchaseOrders.map(p => {
       if (p.id !== poId) return p;
 
-      const newRevNum = p.revisions.length;
+      const newRevNum = (p.revisions || []).length;
       const revisionChangeDetails: any[] = [];
 
       const updatedLines = p.productLines.map(line => {
@@ -2142,7 +2142,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: p.status === 'Baseline Pending' ? 'In Progress' : getPurchaseOrderStatus(updatedLines, p.isClosed),
         committedDeliveryDate: finalBaselineDelivery,
         revisedDeliveryDate: finalRevisedDelivery,
-        revisions: [...p.revisions, newRev],
+        revisions: [...(p.revisions || []), newRev],
         productLines: updatedLines,
         lastUpdatedBy: user,
         lastUpdatedAt: new Date().toISOString()
@@ -2157,7 +2157,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user,
       activeRole,
       po?.poNumber || '',
-      `APPROVE_BASELINE_REV_${po?.revisions.length || 1}`,
+      `APPROVE_BASELINE_REV_${(po?.revisions || []).length || 1}`,
       docRef,
       `Approved baseline duration revision. Reason: ${reason}`
     );
@@ -2353,7 +2353,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       lastUpdatedBy: activeRole,
       lastUpdatedAt: new Date().toISOString(),
-      isClosed: false
+      isClosed: false,
+      isLd: Boolean(newPoData.isLd)
     };
 
     const newPOsList = [newPO, ...purchaseOrders];

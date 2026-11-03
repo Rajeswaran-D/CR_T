@@ -64,6 +64,31 @@ def format_db_date(val: Any) -> str:
     return s[:10] if len(s) >= 10 else s
 
 
+def format_db_datetime(val: Any) -> Optional[str]:
+    """Safely format any datetime/timestamp to MySQL YYYY-MM-DD HH:MM:SS format."""
+    if val is None:
+        return None
+    if isinstance(val, (datetime, date)):
+        if isinstance(val, datetime):
+            return val.strftime("%Y-%m-%d %H:%M:%S")
+        return f"{val.strftime('%Y-%m-%d')} 00:00:00"
+    s = str(val).strip()
+    if not s or s.lower() in ("none", "null", "undefined", ""):
+        return None
+    import re
+    if re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", s):
+        return s
+    try:
+        clean = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        return f"{s[:10]} 00:00:00"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Organization
 # ---------------------------------------------------------------------------
@@ -96,7 +121,18 @@ def verify_schema(conn: pymysql.connections.Connection) -> dict:
             "SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()"
         )
         rows = cursor.fetchall()
-    present_set = {r["t"] for r in rows}
+        present_set = {r["t"] for r in rows}
+        if "purchase_orders" in present_set:
+            try:
+                cursor.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() AND table_name = 'purchase_orders' AND column_name = 'is_ld'"
+                )
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE purchase_orders ADD COLUMN is_ld TINYINT(1) NOT NULL DEFAULT 0")
+                    conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to auto-add is_ld column: {e}")
     present = [t for t in EXPECTED_TABLES if t in present_set]
     missing = [t for t in EXPECTED_TABLES if t not in present_set]
     return {"expected": EXPECTED_TABLES, "present": present, "missing": missing}
@@ -126,8 +162,8 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
                     id, organization_id, po_number, customer_name, customer_po_ref,
                     po_date, booked_amount, contract_review_ref, committed_delivery_date,
                     revised_delivery_date, actual_delivery_date, status, is_closed,
-                    closure_notes, is_cancelled, cancellation_reason, created_at, updated_at
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
+                    closure_notes, is_cancelled, cancellation_reason, is_ld, created_at, updated_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
                 ON DUPLICATE KEY UPDATE
                     customer_name=VALUES(customer_name),
                     customer_po_ref=VALUES(customer_po_ref),
@@ -142,6 +178,7 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
                     closure_notes=VALUES(closure_notes),
                     is_cancelled=VALUES(is_cancelled),
                     cancellation_reason=VALUES(cancellation_reason),
+                    is_ld=VALUES(is_ld),
                     updated_at=NOW()""",
                 (
                     po_id, org_id, po.get("poNumber"), po.get("customerName", ""),
@@ -149,7 +186,7 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
                     po.get("contractReviewRef", ""), committed, revised, actual,
                     po.get("status", "In Progress"), bool(po.get("isClosed")),
                     po.get("closureNotes"), bool(po.get("isCancelled")),
-                    po.get("cancellationReason"),
+                    po.get("cancellationReason"), bool(po.get("isLd") or po.get("is_ld")),
                 ),
             )
 
@@ -157,8 +194,8 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
             cr = po.get("cancellationRequest")
             if cr and isinstance(cr, dict) and (cr.get("id") or cr.get("reason")):
                 cr_id = to_db_id(cr.get("id") or f"cnc-{po_id}", "cnc")
-                req_at = cr.get("requestedAt") or datetime.now().isoformat()
-                dec_at = cr.get("decisionAt") or (datetime.now().isoformat() if cr.get("status") in ("Rejected", "Approved") else None)
+                req_at = format_db_datetime(cr.get("requestedAt")) or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                dec_at = format_db_datetime(cr.get("decisionAt")) if cr.get("status") in ("Rejected", "Approved") else None
                 cursor.execute(
                     """INSERT INTO cancellation_requests (
                         id, organization_id, purchase_order_id, po_number, customer_name,
@@ -324,37 +361,40 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
 
             # Baseline Revisions
             for rev in (po.get("revisions") or []):
-                rev_id = to_db_id(f"{po_id}-rev-{rev.get('revNumber','')}", "rev")
-                cursor.execute(
-                    """INSERT INTO baseline_revisions (id,organization_id,purchase_order_id,revision_number,
-                    reason,document_reference,requested_by,approved_by,approved_at)
-                    VALUES(%s,%s,%s,%s,%s,%s,NULL,NULL,%s)
-                    ON DUPLICATE KEY UPDATE reason=VALUES(reason),document_reference=VALUES(document_reference),
-                    approved_at=VALUES(approved_at)""",
-                    (rev_id, org_id, po_id, rev.get("revNumber"), rev.get("reason",""),
-                     rev.get("docRef",""),
-                     rev.get("approvedAt") or datetime.now(timezone.utc).isoformat()),
-                )
-                for ch in (rev.get("changes") or []):
-                    ch_line_id = to_db_id(ch.get("lineId"), "lin")
-                    change_id = to_db_id(f"{rev_id}-{ch_line_id}-{ch.get('milestoneKey','')}", "chg")
-                    cursor.execute("SELECT id FROM product_lines WHERE id = %s LIMIT 1", (ch_line_id,))
-                    if not cursor.fetchone():
-                        continue
+                try:
+                    rev_id = to_db_id(f"{po_id}-rev-{rev.get('revNumber','')}", "rev")
+                    approved_at = format_db_datetime(rev.get("approvedAt")) or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     cursor.execute(
-                        """INSERT INTO baseline_revision_changes (id,organization_id,baseline_revision_id,
-                        product_line_id,milestone_key,old_duration_days,new_duration_days,
-                        old_baseline_end_date,new_baseline_end_date)
-                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON DUPLICATE KEY UPDATE
-                        old_duration_days=VALUES(old_duration_days),new_duration_days=VALUES(new_duration_days),
-                        old_baseline_end_date=VALUES(old_baseline_end_date),
-                        new_baseline_end_date=VALUES(new_baseline_end_date)""",
-                        (change_id, org_id, rev_id, ch_line_id, ch.get("milestoneKey"),
-                         ch.get("oldDuration",0), ch.get("newDuration",0),
-                         format_db_date(ch.get("oldBaselineEnd")) if ch.get("oldBaselineEnd") else po_date,
-                         format_db_date(ch.get("newBaselineEnd")) if ch.get("newBaselineEnd") else committed),
+                        """INSERT INTO baseline_revisions (id,organization_id,purchase_order_id,revision_number,
+                        reason,document_reference,requested_by,approved_by,approved_at)
+                        VALUES(%s,%s,%s,%s,%s,%s,NULL,NULL,%s)
+                        ON DUPLICATE KEY UPDATE reason=VALUES(reason),document_reference=VALUES(document_reference),
+                        approved_at=VALUES(approved_at)""",
+                        (rev_id, org_id, po_id, rev.get("revNumber"), rev.get("reason",""),
+                         rev.get("docRef",""), approved_at),
                     )
+                    for ch in (rev.get("changes") or []):
+                        ch_line_id = to_db_id(ch.get("lineId"), "lin")
+                        change_id = to_db_id(f"{rev_id}-{ch_line_id}-{ch.get('milestoneKey','')}", "chg")
+                        cursor.execute("SELECT id FROM product_lines WHERE id = %s LIMIT 1", (ch_line_id,))
+                        if not cursor.fetchone():
+                            continue
+                        cursor.execute(
+                            """INSERT INTO baseline_revision_changes (id,organization_id,baseline_revision_id,
+                            product_line_id,milestone_key,old_duration_days,new_duration_days,
+                            old_baseline_end_date,new_baseline_end_date)
+                            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            ON DUPLICATE KEY UPDATE
+                            old_duration_days=VALUES(old_duration_days),new_duration_days=VALUES(new_duration_days),
+                            old_baseline_end_date=VALUES(old_baseline_end_date),
+                            new_baseline_end_date=VALUES(new_baseline_end_date)""",
+                            (change_id, org_id, rev_id, ch_line_id, ch.get("milestoneKey"),
+                             ch.get("oldDuration",0), ch.get("newDuration",0),
+                             format_db_date(ch.get("oldBaselineEnd")) if ch.get("oldBaselineEnd") else po_date,
+                             format_db_date(ch.get("newBaselineEnd")) if ch.get("newBaselineEnd") else committed),
+                        )
+                except Exception as rev_err:
+                    logger.warning(f"Failed to persist revision for PO {po_id}: {rev_err}")
     conn.commit()
 
 
@@ -537,6 +577,77 @@ def load_orders_from_db(conn: pymysql.connections.Connection, org_id: str) -> li
         except Exception:
             pass
 
+        # Revisions for this PO
+        revisions = []
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT * FROM baseline_revisions WHERE purchase_order_id = %s ORDER BY revision_number ASC",
+                    (po_row["id"],),
+                )
+                rev_rows = cursor.fetchall()
+            for r_row in rev_rows:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT * FROM baseline_revision_changes WHERE baseline_revision_id = %s",
+                        (r_row["id"],),
+                    )
+                    ch_rows = cursor.fetchall()
+                revisions.append({
+                    "revNumber": int(r_row.get("revision_number") or 0),
+                    "requestedBy": r_row.get("requested_by") or "Project Management",
+                    "approvedBy": r_row.get("approved_by") or "Project Management",
+                    "approvedAt": r_row["approved_at"].isoformat() if hasattr(r_row.get("approved_at"), "isoformat") else str(r_row.get("approved_at") or ""),
+                    "reason": r_row.get("reason") or "",
+                    "docRef": r_row.get("document_reference") or "",
+                    "changes": [
+                        {
+                            "lineId": ch.get("product_line_id"),
+                            "milestoneKey": ch.get("milestone_key"),
+                            "oldDurationDays": int(ch.get("old_duration_days") or 0),
+                            "newDurationDays": int(ch.get("new_duration_days") or 0),
+                            "oldBaselineEndDate": format_db_date(ch.get("old_baseline_end_date")),
+                            "newBaselineEndDate": format_db_date(ch.get("new_baseline_end_date")),
+                        }
+                        for ch in ch_rows
+                    ],
+                })
+        except Exception:
+            pass
+
+        if not revisions:
+            revisions = [
+                {
+                    "revNumber": 0,
+                    "requestedBy": "Project Management",
+                    "approvedBy": "Project Management",
+                    "approvedAt": str(po_row.get("created_at") or datetime.now().isoformat()),
+                    "reason": "Initial schedule generated from category template.",
+                    "docRef": po_row.get("contract_review_ref") or "CR-INIT",
+                    "changes": [],
+                }
+            ]
+
+        # Attachments for this PO
+        attachments = []
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT * FROM po_attachments WHERE purchase_order_id = %s ORDER BY uploaded_at ASC",
+                    (po_row["id"],),
+                )
+                att_rows = cursor.fetchall()
+            for att in att_rows:
+                attachments.append({
+                    "id": att["id"],
+                    "name": att.get("file_name") or "attachment",
+                    "type": att.get("attachment_type") or "General",
+                    "size": att.get("file_size") or "",
+                    "uploadedAt": att["uploaded_at"].isoformat() if hasattr(att.get("uploaded_at"), "isoformat") else str(att.get("uploaded_at") or ""),
+                })
+        except Exception:
+            pass
+
         order_obj: dict = {
             "id": po_row["id"],
             "poNumber": po_row.get("po_number"),
@@ -553,7 +664,10 @@ def load_orders_from_db(conn: pymysql.connections.Connection, org_id: str) -> li
             "closureNotes": po_row.get("closure_notes") or None,
             "isCancelled": bool(po_row.get("is_cancelled")),
             "cancellationReason": po_row.get("cancellation_reason") or None,
+            "isLd": bool(po_row.get("is_ld")),
             "productLines": product_lines,
+            "revisions": revisions,
+            "attachments": attachments,
             "lastUpdatedAt": po_row["updated_at"].isoformat() if hasattr(po_row.get("updated_at"), "isoformat") else str(po_row.get("updated_at", "")),
             "createdAt": po_row["created_at"].isoformat() if hasattr(po_row.get("created_at"), "isoformat") else str(po_row.get("created_at", "")),
         }
@@ -967,9 +1081,9 @@ def save_cancellations_to_db(conn: pymysql.connections.Connection, org_id: str, 
                 decision_at=VALUES(decision_at),decision_notes=VALUES(decision_notes)""",
                 (c_id, org_id, c.get("poId"), c.get("poNumber"), c.get("customerName"),
                  c.get("requestedBy"), c.get("requestedRole") or "Buyer",
-                 c.get("requestedAt") or datetime.now().isoformat(), c.get("reason"),
+                 format_db_datetime(c.get("requestedAt")) or datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c.get("reason"),
                  c.get("status","Pending"), c.get("approvedBy") or c.get("decisionBy"),
-                 c.get("approvedAt") or c.get("decisionAt"), c.get("notes") or c.get("decisionNotes")),
+                 format_db_datetime(c.get("approvedAt") or c.get("decisionAt")), c.get("notes") or c.get("decisionNotes")),
             )
     conn.commit()
 

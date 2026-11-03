@@ -303,6 +303,7 @@ export interface PurchaseOrder {
   cancelledAt?: string;
   cancelledBy?: string;
   cancellationReason?: string;
+  isLd?: boolean;
 }
 
 export interface RectificationAction {

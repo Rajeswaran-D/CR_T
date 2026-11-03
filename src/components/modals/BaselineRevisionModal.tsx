@@ -100,7 +100,7 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
     });
   };
 
-  const nextRevNum = po.revisions.length;
+  const nextRevNum = (po.revisions || []).length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

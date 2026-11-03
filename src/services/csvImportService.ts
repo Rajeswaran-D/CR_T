@@ -1139,6 +1139,7 @@ export function parseAndValidateCsv(
   const categoryIdx = getColIdx(['Category', 'Product Category']);
   const designTypeIdx = getColIdx(['Design Type', 'Design']);
   const qtyIdx = getColIdx(['Quantity', 'Qty', 'Quantity (Nos)', 'Nos']);
+  const ldIdx = getColIdx(['LD', 'Liquidated Damages', 'Is LD', 'is_ld', 'isLd', 'LD Clause', 'LD Applicable']);
   const statusIdx = getColIdx([
     'Shippment status', 'Shipment status', 'Shipment Status', 'Shippment Status',
     'Order Status', 'OrderStatus', 'PO Status', 'Status', 'Current Status', 'Stage Status', 'State'
@@ -1319,6 +1320,7 @@ export function parseAndValidateCsv(
     poDate: string;
     bookedAmount?: number;
     deliveryDate?: string;
+    isLd?: boolean;
     lines: RawLineItem[];
     /** True once a line-level amount has been applied to the group total. */
     amountFromLine?: boolean;
@@ -1351,6 +1353,8 @@ export function parseAndValidateCsv(
     const poDate = normalizeCsvDate(rawPoDate);
     const rawBookedAmt = cellAt(bookedAmtIdx).trim();
     const parsedBookedAmt = parseBookedAmount(rawBookedAmt);
+    const rawLd = cellAt(ldIdx).trim();
+    const rowIsLd = /^(true|yes|y|1|ld)$/i.test(rawLd);
     const rawProdName = cellAt(prodNameIdx).trim();
     const productName = rawProdName;
     const rawCategory = cellAt(categoryIdx).trim();
@@ -1549,6 +1553,7 @@ export function parseAndValidateCsv(
           poDate,
           bookedAmount: amountForRow,
           deliveryDate,
+          isLd: rowIsLd,
           lines: [],
           // Remember whether the amount came from a line-level value so repeated
           // values on later lines of the same PO are never double-counted.
@@ -1567,6 +1572,7 @@ export function parseAndValidateCsv(
           existingGroup.bookedAmount += amountForRow;
         }
         // Repeating the PO-level total on every line must not inflate the order value.
+        if (rowIsLd) existingGroup.isLd = true;
         if (existingGroup.customerName === '' && customerName) existingGroup.customerName = customerName;
         if (!existingGroup.customerPoRef || existingGroup.customerPoRef === `PO-REF-${poNumber}`) {
           if (customerPoRef) existingGroup.customerPoRef = customerPoRef;
@@ -1949,6 +1955,7 @@ export function parseAndValidateCsv(
       poDate: effectivePoDate,
       startDate: effectivePoDate,
       bookedAmount: group.bookedAmount,
+      isLd: Boolean(group.isLd),
       contractReviewRef: `CR-IMP-${poNum}`,
       committedDeliveryDate: poDeliveryDate,
       revisedDeliveryDate: finalRevisedDeliveryDate,

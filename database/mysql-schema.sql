@@ -41,6 +41,7 @@ CREATE TABLE purchase_orders (
   cancelled_at TIMESTAMP NULL,
   cancelled_by VARCHAR(160) NULL,
   cancellation_reason TEXT NULL,
+  is_ld BOOLEAN NOT NULL DEFAULT FALSE,
   created_by VARCHAR(128) NULL,
   last_updated_by VARCHAR(128) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
