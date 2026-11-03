@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -57,8 +58,22 @@ from .security import (
     validate_order_body, validate_config_body, is_allowed_origin,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+LOG_FILE = Path(__file__).parent.parent / "backend.log"
+
+# Multi-output logging: console + backend.log
+_file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+_stream_handler = logging.StreamHandler(sys.stdout)
+_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+_file_handler.setFormatter(_formatter)
+_stream_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=logging.INFO, handlers=[_stream_handler, _file_handler])
 logger = logging.getLogger("cft.server")
+
+# Ensure uvicorn logs propagate to root handlers
+for _name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+    _l = logging.getLogger(_name)
+    _l.propagate = True
 
 _start_time = time.time()
 
@@ -861,6 +876,23 @@ async def init_db_schema(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail="Schema initialization failed. See server logs.")
+
+
+@app.get("/api/logs")
+async def get_server_logs(limit: int = 150):
+    """Retrieve recent backend execution and request logs."""
+    if not LOG_FILE.exists():
+        return {"file": str(LOG_FILE), "total_lines": 0, "logs": []}
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+            lines = [line.rstrip() for line in f.readlines()]
+        return {
+            "file": str(LOG_FILE),
+            "total_lines": len(lines),
+            "logs": lines[-limit:]
+        }
+    except Exception as e:
+        return {"file": str(LOG_FILE), "error": str(e), "logs": []}
 
 
 # ===========================================================================
