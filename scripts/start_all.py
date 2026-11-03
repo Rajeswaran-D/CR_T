@@ -46,13 +46,19 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         return s.connect_ex((host, port)) == 0
 
 def main():
+    use_vite = "--dev" in sys.argv or "--vite" in sys.argv or os.environ.get("USE_VITE") == "1"
+
     print("====================================================")
-    print("🚀 Starting CIRCOR E2E Tracker (Python Unified Runner)")
-    print(f"⚡ Backend:  http://127.0.0.1:{BE_PORT}/api")
-    print(f"⚡ Frontend: http://localhost:{FE_PORT}/")
+    print("🚀 CIRCOR E2E Tracker (100% Python Runtime)")
+    print(f"🌐 Application: http://127.0.0.1:{BE_PORT}/")
+    print(f"⚡ API Gateway: http://127.0.0.1:{BE_PORT}/api")
+    if use_vite:
+        print(f"🛠️  Vite Dev:    http://localhost:{FE_PORT}/ (Hot Reloading)")
+    else:
+        print("✅ Zero Node.js runtime required — Frontend served via Python!")
     print("====================================================\n")
 
-    # 1. Start Python FastAPI backend (if not already running)
+    # 1. Start Python FastAPI backend (serves both Frontend & API on port 5000)
     if is_port_in_use(BE_PORT):
         print(f"ℹ️  Backend server is already running on port {BE_PORT}. Connecting to existing server.")
     else:
@@ -60,13 +66,28 @@ def main():
         be_proc = subprocess.Popen(be_cmd, cwd=str(ROOT))
         procs.append(be_proc)
 
-    # 2. Start Vite frontend
-    npm_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
-    fe_cmd = [npm_cmd, "vite"]
-    fe_proc = subprocess.Popen(fe_cmd, cwd=str(ROOT), shell=True)
-    procs.append(fe_proc)
+    # 2. Optionally start Vite frontend only if explicitly requested (--dev / --vite)
+    if use_vite:
+        npm_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
+        fe_cmd = [npm_cmd, "vite"]
+        try:
+            fe_proc = subprocess.Popen(fe_cmd, cwd=str(ROOT), shell=True)
+            procs.append(fe_proc)
+        except Exception as e:
+            print(f"⚠️  Could not start Vite dev server ({e}). Serving static frontend from Python.")
+    else:
+        # Launch browser to port 5000 automatically
+        import webbrowser
+        def open_browser():
+            time.sleep(1.2)
+            try:
+                webbrowser.open(f"http://127.0.0.1:{BE_PORT}/")
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=open_browser, daemon=True).start()
 
-    print("\nServices are running! Press Ctrl+C anytime to stop.\n")
+    print(f"\nSystem is live at http://127.0.0.1:{BE_PORT}/ ! Press Ctrl+C anytime to stop.\n")
     try:
         while True:
             time.sleep(1)

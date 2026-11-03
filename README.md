@@ -20,26 +20,33 @@ The current development flow is:
 
 The schema is ready for MySQL 8/InnoDB. The remaining deployment step is an authenticated backend adapter that maps the storage contract to these tables and applies organization authorization inside transactions.
 
-## Development
+## Running the System (100% Python Runtime — No Node.js Required)
 
-1. **Start Python FastAPI Backend**:
-   ```bash
-   pip install -r backend/requirements.txt
-   python start_backend.py
-   # or: npm run server:python
-   ```
-2. **Start Frontend (Vite)**:
-   ```bash
-   npm run dev
-   ```
-3. **Run Backend Test Suite**:
-   ```bash
-   python backend/test_api.py
-   ```
-4. **Run E2E Regression Tests**:
-   ```bash
-   npx tsx src/tests/e2eTestRunner.ts
-   ```
+The entire application (Frontend UI, Manufacturing Engine, and MySQL Database API) can run purely with Python without Node.js:
+
+```bash
+# 1. Install Python dependencies (one time)
+pip install -r backend/requirements.txt
+
+# 2. Run the application (Frontend + Backend on port 5000)
+python run.py
+# or: python start_backend.py
+```
+
+Open your browser at **`http://127.0.0.1:5000/`**.
+- **Frontend UI**: Served directly by Python FastAPI at `http://127.0.0.1:5000/`
+- **Backend API**: Running at `http://127.0.0.1:5000/api`
+- **Zero Node.js runtime required!**
+
+---
+
+### Optional Frontend Development (with Node/Vite HMR)
+
+If you are developing frontend code and want instant Hot Module Reloading:
+```bash
+npm run dev
+# or: python scripts/start_all.py --dev
+```
 
 The rest of this document is the standard Vite starter reference.
 

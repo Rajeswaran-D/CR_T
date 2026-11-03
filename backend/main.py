@@ -873,6 +873,8 @@ if dist_path.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str):
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404, detail="API route not found")
         file_path = dist_path / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(str(file_path))
