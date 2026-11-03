@@ -30,6 +30,14 @@ coverage
 Book2.xlsx
 *.xlsx
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
 # Editor directories and files
 .commandcode/
 .vscode/*

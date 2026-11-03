@@ -84,8 +84,8 @@ console.log(`⚡ Frontend Port: ${FE_PORT}`);
 console.log(`⚡ Ngrok Binary:  ${ngrokBin}`);
 console.log('\x1b[36m====================================================\x1b[0m\n');
 
-// 1. Spawn Backend
-const beChild = spawn(npxCmd, ['tsx', 'server/server.ts'], {
+// 1. Spawn Backend (Python FastAPI)
+const beChild = spawn('python', ['start_backend.py'], {
   cwd: ROOT,
   shell: true,
   env: { ...process.env, PORT: BE_PORT }

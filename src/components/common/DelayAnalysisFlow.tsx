@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { PurchaseOrder, DelayCategory, ProductLine } from '../../types';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, ShieldAlert, Sparkles, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, ShieldAlert, Sparkles, Zap, Layers, Package } from 'lucide-react';
 import { getDaysDifference } from '../../services/calculationEngine';
 
 interface DelayAnalysisFlowProps {
@@ -31,6 +31,27 @@ export interface DelayStep {
   lineNumber?: string;
   productLineId?: string;
   affectedProducts?: { lineId: string; lineNumber: string; productName: string; varianceDays: number; delayReason?: string }[];
+}
+
+export interface ProductLineDelaySummary {
+  lineId: string;
+  lineNumber: string;
+  productName: string;
+  category?: string;
+  qty: number;
+  designType?: string;
+  status: string;
+  overallVarianceDays: number;
+  delaySteps: DelayStep[];
+  allDelayOriginSteps: DelayStep[];
+  recoverySteps: DelayStep[];
+  totalDaysDelayed: number;
+  totalDaysRecovered: number;
+  netVarianceDays: number;
+  isDelayed: boolean;
+  isRecovered: boolean;
+  revisedDeliveryDate: string;
+  committedDeliveryDate: string;
 }
 
 /**
@@ -202,6 +223,7 @@ export function extractDelayFlow(po: PurchaseOrder, targetLineId?: string): {
   totalDaysRecovered: number;
   isRecovered: boolean;
   aheadDays: number;
+  productLineDelayFlows: ProductLineDelaySummary[];
 } {
   if (!po || !po.productLines || po.productLines.length === 0) {
     return {
@@ -216,7 +238,8 @@ export function extractDelayFlow(po: PurchaseOrder, targetLineId?: string): {
       totalDaysDelayed: 0,
       totalDaysRecovered: 0,
       isRecovered: false,
-      aheadDays: 0
+      aheadDays: 0,
+      productLineDelayFlows: []
     };
   }
 
@@ -224,29 +247,78 @@ export function extractDelayFlow(po: PurchaseOrder, targetLineId?: string): {
   if (targetLineId) {
     const line = po.productLines.find(l => l.id === targetLineId) || po.productLines[0];
     const res = extractLineDelayFlow(po, line);
+    const lastMs = line.milestones?.[line.milestones.length - 1];
+    const singleProductSummary: ProductLineDelaySummary = {
+      lineId: line.id,
+      lineNumber: line.lineNumber || 'LINE-01',
+      productName: line.productName || 'Manufacturing Line',
+      category: line.category,
+      qty: line.qty || 1,
+      designType: line.designType || 'Existing Design',
+      status: line.status || 'Not Started',
+      overallVarianceDays: line.overallVarianceDays || 0,
+      delaySteps: res.delaySteps,
+      allDelayOriginSteps: res.allDelayOriginSteps,
+      recoverySteps: res.recoverySteps,
+      totalDaysDelayed: res.totalDaysDelayed,
+      totalDaysRecovered: res.totalDaysRecovered,
+      netVarianceDays: res.netVarianceDays,
+      isDelayed: res.hasDelays,
+      isRecovered: res.isRecovered,
+      revisedDeliveryDate: lastMs?.forecastEndDate || lastMs?.actualEndDate || po.revisedDeliveryDate || po.committedDeliveryDate,
+      committedDeliveryDate: lastMs?.committedBaselineEndDate || po.committedDeliveryDate,
+    };
     return {
       ...res,
-      allStepsWithVariance: res.delaySteps
+      allStepsWithVariance: res.delaySteps,
+      productLineDelayFlows: [singleProductSummary]
     };
   }
 
   // If no targetLineId is provided, analyze ALL product lines in the PO
-  const allLineResults = po.productLines.map(line => extractLineDelayFlow(po, line));
+  const allLineResults = po.productLines.map(line => ({
+    line,
+    flow: extractLineDelayFlow(po, line)
+  }));
+
+  const productLineDelayFlows: ProductLineDelaySummary[] = allLineResults.map(({ line, flow }) => {
+    const lastMs = line.milestones?.[line.milestones.length - 1];
+    return {
+      lineId: line.id,
+      lineNumber: line.lineNumber || 'LINE-01',
+      productName: line.productName || 'Manufacturing Line',
+      category: line.category,
+      qty: line.qty || 1,
+      designType: line.designType || 'Existing Design',
+      status: line.status || 'Not Started',
+      overallVarianceDays: line.overallVarianceDays || 0,
+      delaySteps: flow.delaySteps,
+      allDelayOriginSteps: flow.allDelayOriginSteps,
+      recoverySteps: flow.recoverySteps,
+      totalDaysDelayed: flow.totalDaysDelayed,
+      totalDaysRecovered: flow.totalDaysRecovered,
+      netVarianceDays: flow.netVarianceDays,
+      isDelayed: flow.hasDelays,
+      isRecovered: flow.isRecovered,
+      revisedDeliveryDate: lastMs?.forecastEndDate || lastMs?.actualEndDate || po.revisedDeliveryDate || po.committedDeliveryDate,
+      committedDeliveryDate: lastMs?.committedBaselineEndDate || po.committedDeliveryDate,
+    };
+  });
   
   // Lines with either active or historical delays
-  const linesWithDelayHistory = allLineResults.filter(r => r.hasHistoricalDelays || r.hasDelays);
+  const linesWithDelayHistory = allLineResults.filter(r => r.flow.hasHistoricalDelays || r.flow.hasDelays);
 
   // Highest net variance across all lines
-  const maxNetVariance = Math.max(...allLineResults.map(r => r.netVarianceDays), 0);
-  const maxDaysDelayed = Math.max(...allLineResults.map(r => r.totalDaysDelayed), 0);
-  const maxDaysRecovered = Math.max(...allLineResults.map(r => r.totalDaysRecovered), 0);
+  const maxNetVariance = Math.max(...allLineResults.map(r => r.flow.netVarianceDays), 0);
+  const maxDaysDelayed = Math.max(...allLineResults.map(r => r.flow.totalDaysDelayed), 0);
+  const maxDaysRecovered = Math.max(...allLineResults.map(r => r.flow.totalDaysRecovered), 0);
 
   // Combine unique delayed steps across lines and attach all affected products
   const stepMap = new Map<string, DelayStep>();
   const affectedProductsMap = new Map<string, { lineId: string; lineNumber: string; productName: string; varianceDays: number; delayReason?: string }[]>();
 
-  linesWithDelayHistory.forEach(res => {
-    res.delaySteps.forEach(step => {
+  linesWithDelayHistory.forEach(({ flow }) => {
+    flow.delaySteps.forEach(step => {
       const existing = stepMap.get(step.stageKey);
       if (!existing || Math.abs(step.stageDelayAdded) > Math.abs(existing.stageDelayAdded)) {
         stepMap.set(step.stageKey, { ...step });
@@ -288,7 +360,7 @@ export function extractDelayFlow(po: PurchaseOrder, targetLineId?: string): {
   const hasHistoricalDelays = combinedDelaySteps.length > 0 || maxDaysDelayed > 0 || maxDaysRecovered > 0;
   const isRecovered = !isPODelayed && hasHistoricalDelays;
   const hasDelays = isPODelayed && combinedDelaySteps.length > 0;
-  const aheadDays = !isPODelayed && !hasHistoricalDelays ? Math.max(...allLineResults.map(r => r.aheadDays), 0) : 0;
+  const aheadDays = !isPODelayed && !hasHistoricalDelays ? Math.max(...allLineResults.map(r => r.flow.aheadDays), 0) : 0;
 
   return {
     hasDelays,
@@ -302,7 +374,8 @@ export function extractDelayFlow(po: PurchaseOrder, targetLineId?: string): {
     totalDaysDelayed: maxDaysDelayed,
     totalDaysRecovered: maxDaysRecovered,
     isRecovered,
-    aheadDays
+    aheadDays,
+    productLineDelayFlows
   };
 }
 
@@ -313,6 +386,9 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
   defaultOpen = false
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [selectedLineId, setSelectedLineId] = useState<string>(lineId || 'all');
+  const [viewMode, setViewMode] = useState<'product' | 'flat'>('product');
+
   const {
     hasDelays,
     hasHistoricalDelays,
@@ -321,7 +397,8 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
     netVarianceDays,
     totalDaysDelayed,
     totalDaysRecovered,
-    aheadDays
+    aheadDays,
+    productLineDelayFlows = []
   } = extractDelayFlow(po, lineId);
 
   // When order has NEVER recorded any delays (clean on-track baseline)
@@ -354,10 +431,26 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
     );
   }
 
+  // Active product filter
+  const activeProductFlow = selectedLineId !== 'all' 
+    ? productLineDelayFlows.find(p => p.lineId === selectedLineId)
+    : null;
+
   const isResolvedState = isRecovered || (netVarianceDays === 0 && (totalDaysRecovered > 0 || totalDaysDelayed > 0 || delaySteps.length > 0));
   const effectiveDelayDays = netVarianceDays > 0 ? netVarianceDays : totalDaysDelayed;
 
-  // Milestone-by-milestone delay & recovery report with collapsible dropdown
+  // Active metrics depending on product tab selection
+  const displayTotalDelayed = activeProductFlow ? activeProductFlow.totalDaysDelayed : totalDaysDelayed;
+  const displayTotalRecovered = activeProductFlow ? activeProductFlow.totalDaysRecovered : totalDaysRecovered;
+  const displayNetVariance = activeProductFlow ? activeProductFlow.netVarianceDays : netVarianceDays;
+  const displayEffectiveDelay = displayNetVariance > 0 ? displayNetVariance : displayTotalDelayed;
+  const displayIsResolved = activeProductFlow ? activeProductFlow.isRecovered : isResolvedState;
+  const displayRevisedDelivery = activeProductFlow ? activeProductFlow.revisedDeliveryDate : (po.revisedDeliveryDate || po.committedDeliveryDate);
+  const displayBaselineDelivery = activeProductFlow ? activeProductFlow.committedDeliveryDate : po.committedDeliveryDate;
+
+  // Filtered steps for milestone cards
+  const displaySteps = activeProductFlow ? activeProductFlow.delaySteps : delaySteps;
+
   return (
     <div className={`bg-white rounded-2xl overflow-hidden shadow-xs transition-all border ${
       isResolvedState ? 'border-emerald-300 ring-1 ring-emerald-200/60' : 'border-rose-200'
@@ -405,6 +498,11 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
                   -{totalDaysRecovered}d Recovered
                 </span>
               )}
+              {po.productLines.length > 1 && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-white/10 text-slate-200 border border-white/15">
+                  {po.productLines.length} Products
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-300 mt-0.5">
               {isResolvedState 
@@ -414,7 +512,7 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
                   : `${delaySteps.length} stages recorded variance (+${totalDaysDelayed}d added${totalDaysRecovered > 0 ? `, -${totalDaysRecovered}d recovered` : ''}) • `
               }
               <span className={isResolvedState ? 'text-emerald-300 font-medium' : 'text-rose-300 font-medium'}>
-                {isOpen ? 'Click to collapse' : 'Click dropdown to expand historical log'}
+                {isOpen ? 'Click to collapse' : 'Click dropdown to expand product-wise delay log'}
               </span>
             </p>
           </div>
@@ -433,22 +531,84 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
       {/* 2. Clear Milestone Delay & Recovery Cards (Collapsible Dropdown Body) */}
       {isOpen && (
         <div className="p-4 space-y-3 bg-slate-50/50 border-t border-slate-800/20 animate-fadeIn">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1">
+          {/* Header & Product Switcher Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-600 font-bold px-1">
             <span className="flex items-center gap-1.5 text-slate-800">
               <Clock className="w-4 h-4 text-slate-600" />
               <span>Milestone Schedule &amp; Audit Log:</span>
             </span>
-            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-              isResolvedState 
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-                : 'bg-rose-100 text-rose-800 border border-rose-200'
-            }`}>
-              {isResolvedState ? 'Net Impact: 0d (Fully Resolved)' : `Net Impact: +${effectiveDelayDays}d`}
-            </span>
+
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                displayIsResolved 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                  : 'bg-rose-100 text-rose-800 border border-rose-200'
+              }`}>
+                {displayIsResolved ? 'Net Impact: 0d (Fully Resolved)' : `Net Impact: +${displayEffectiveDelay}d`}
+              </span>
+            </div>
           </div>
 
+          {/* Product Tabs (when multi-product order) */}
+          {po.productLines.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 pb-1 px-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-500 mr-1 flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-slate-400" /> View by Product:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedLineId('all')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedLineId === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span>All Products ({po.productLines.length})</span>
+                {netVarianceDays > 0 ? (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-rose-500 text-white">
+                    +{netVarianceDays}d
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500 text-white">
+                    0d
+                  </span>
+                )}
+              </button>
+
+              {productLineDelayFlows.map(prod => {
+                const isSelected = selectedLineId === prod.lineId;
+                return (
+                  <button
+                    key={prod.lineId}
+                    type="button"
+                    onClick={() => setSelectedLineId(prod.lineId)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    <Package className="w-3 h-3" />
+                    <span>{prod.lineNumber}: {prod.productName}</span>
+                    {prod.netVarianceDays > 0 ? (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-rose-500 text-white">
+                        +{prod.netVarianceDays}d
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500 text-white">
+                        0d
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Detailed Milestone Cards */}
           <div className="space-y-2.5">
-            {delaySteps.map((step, idx) => {
+            {displaySteps.map((step, idx) => {
               const isRecovery = step.isRecovery;
 
               return (
@@ -472,6 +632,12 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
                       <span className="font-bold text-slate-900 text-xs">
                         Stage {step.stageOrder}: {step.stageName.replace(/^\d+\.\s*/, '')}
                       </span>
+
+                      {step.lineNumber && step.productLineName && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                          {step.lineNumber}: {step.productLineName}
+                        </span>
+                      )}
 
                       {isRecovery ? (
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
@@ -553,77 +719,213 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
             })}
           </div>
 
-          {/* 3. TOTAL DELAY IN ALL STAGES SUMMARY IN LOG */}
+          {/* 3. TOTAL DELAY IN ALL STAGES SUMMARY IN LOG (PRODUCT-WISE LEDGER) */}
           <div className="mt-4 p-4 rounded-xl border border-slate-300 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-sm space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/80 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs ${
-                  isResolvedState ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                  displayIsResolved ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
                 }`}>
                   Σ
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-white tracking-wide uppercase font-mono">
-                    Total Delay in All Stages
+                  <h4 className="text-xs font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
+                    <span>{activeProductFlow ? `Total Delay — ${activeProductFlow.lineNumber}: ${activeProductFlow.productName}` : 'Total Delay in All Stages'}</span>
                   </h4>
                   <p className="text-[10px] text-slate-300">
-                    Comprehensive ledger of cumulative delays and recoveries across all 14 manufacturing stages
+                    {activeProductFlow 
+                      ? `Product-specific ledger for ${activeProductFlow.productName} (Qty: ${activeProductFlow.qty} • ${activeProductFlow.designType})`
+                      : 'Comprehensive ledger of cumulative delays and recoveries across all 14 manufacturing stages'}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold ${
-                  isResolvedState 
+                  displayIsResolved 
                     ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/40' 
                     : 'bg-rose-500/25 text-rose-300 border border-rose-400/40'
                 }`}>
-                  {isResolvedState ? '0 Days Net Delay' : `+${effectiveDelayDays} Days Net Overrun`}
+                  {displayIsResolved ? '0 Days Net Delay' : `+${displayEffectiveDelay} Days Net Overrun`}
                 </span>
               </div>
             </div>
+
+            {/* Product Switcher inside Dark Card */}
+            {po.productLines.length > 1 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLineId('all')}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedLineId === 'all'
+                      ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-xs'
+                      : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>All Products ({po.productLines.length})</span>
+                  <span className={`px-1 rounded text-[9px] ${netVarianceDays > 0 ? 'bg-rose-900/60 text-rose-200' : 'bg-emerald-900/60 text-emerald-200'}`}>
+                    {netVarianceDays > 0 ? `+${netVarianceDays}d` : '0d'}
+                  </span>
+                </button>
+
+                {productLineDelayFlows.map(prod => {
+                  const isSelected = selectedLineId === prod.lineId;
+                  return (
+                    <button
+                      key={prod.lineId}
+                      type="button"
+                      onClick={() => setSelectedLineId(prod.lineId)}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-xs'
+                          : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                      }`}
+                    >
+                      <Package className="w-3 h-3" />
+                      <span>{prod.lineNumber}: {prod.productName}</span>
+                      <span className={`px-1 rounded text-[9px] ${prod.netVarianceDays > 0 ? 'bg-rose-900/60 text-rose-200' : 'bg-emerald-900/60 text-emerald-200'}`}>
+                        {prod.netVarianceDays > 0 ? `+${prod.netVarianceDays}d` : '0d'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Metrics Breakdown Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs font-mono">
               <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-[10px] text-slate-400 uppercase">Gross Delay Formed</div>
-                <div className="text-sm font-extrabold text-rose-400 mt-0.5">+{totalDaysDelayed}d</div>
-                <div className="text-[9px] text-slate-400 mt-0.5">Across {delaySteps.filter(s => !s.isRecovery).length} stage(s)</div>
+                <div className="text-sm font-extrabold text-rose-400 mt-0.5">+{displayTotalDelayed}d</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Across {displaySteps.filter(s => !s.isRecovery).length} stage(s)</div>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-[10px] text-slate-400 uppercase">Delays Recovered</div>
                 <div className="text-sm font-extrabold text-emerald-400 mt-0.5">
-                  {totalDaysRecovered > 0 ? `-${totalDaysRecovered}d` : '0d'}
+                  {displayTotalRecovered > 0 ? `-${displayTotalRecovered}d` : '0d'}
                 </div>
-                <div className="text-[9px] text-slate-400 mt-0.5">Across {delaySteps.filter(s => s.isRecovery).length} stage(s)</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Across {displaySteps.filter(s => s.isRecovery).length} stage(s)</div>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-[10px] text-slate-400 uppercase">Net Schedule Impact</div>
-                <div className={`text-sm font-extrabold mt-0.5 ${isResolvedState ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {isResolvedState ? '0d (On Time)' : `+${effectiveDelayDays}d`}
+                <div className={`text-sm font-extrabold mt-0.5 ${displayIsResolved ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {displayIsResolved ? '0d (On Time)' : `+${displayEffectiveDelay}d`}
                 </div>
                 <div className="text-[9px] text-slate-400 mt-0.5">Contract delivery shift</div>
               </div>
 
               <div className="p-2.5 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-[10px] text-slate-400 uppercase">Revised Delivery Target</div>
-                <div className="text-xs font-extrabold text-cyan-300 mt-0.5 truncate" title={po.revisedDeliveryDate || po.committedDeliveryDate}>
-                  {po.revisedDeliveryDate || po.committedDeliveryDate}
+                <div className="text-xs font-extrabold text-cyan-300 mt-0.5 truncate" title={displayRevisedDelivery}>
+                  {displayRevisedDelivery}
                 </div>
-                <div className="text-[9px] text-slate-400 mt-0.5">Baseline: {po.committedDeliveryDate}</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">Baseline: {displayBaselineDelivery}</div>
               </div>
             </div>
 
-            {/* Stage-by-Stage Cumulative Delay Ledger */}
-            {delaySteps.length > 0 && (
-              <div className="pt-2 border-t border-slate-700/60">
-                <div className="text-[10px] font-mono uppercase text-slate-300 font-bold mb-1.5 flex items-center justify-between">
-                  <span>Stage-by-Stage Delay Log Contributions:</span>
-                  <span className="text-slate-400">Total Delayed Stages: {delaySteps.length}</span>
+            {/* Stage-by-Stage Cumulative Delay Ledger (Product-Wise Grouped) */}
+            <div className="pt-2 border-t border-slate-700/60 space-y-2">
+              <div className="text-[10px] font-mono uppercase text-slate-300 font-bold flex items-center justify-between">
+                <span>Stage-by-Stage Delay Log Contributions:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Total Delayed Stages: {displaySteps.length}</span>
+                  {po.productLines.length > 1 && selectedLineId === 'all' && (
+                    <div className="inline-flex rounded-md p-0.5 bg-black/40 border border-white/10 text-[9px]">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('product')}
+                        className={`px-1.5 py-0.5 rounded cursor-pointer ${viewMode === 'product' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Product-Wise
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('flat')}
+                        className={`px-1.5 py-0.5 rounded cursor-pointer ${viewMode === 'flat' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Master List
+                      </button>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* PRODUCT-WISE GROUPED VIEW */}
+              {selectedLineId === 'all' && viewMode === 'product' ? (
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  {productLineDelayFlows.map(prod => (
+                    <div key={prod.lineId} className="rounded-lg bg-white/5 border border-white/10 p-2.5 space-y-1.5">
+                      {/* Product header row */}
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5 text-xs font-mono">
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold">
+                            {prod.lineNumber}
+                          </span>
+                          <span className="font-bold text-white text-xs truncate">
+                            {prod.productName}
+                          </span>
+                          <span className="text-[10px] text-slate-400 hidden sm:inline">
+                            (Qty: {prod.qty} • {prod.designType})
+                          </span>
+                        </div>
+                        <div className="shrink-0">
+                          {prod.netVarianceDays > 0 ? (
+                            <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
+                              +{prod.netVarianceDays}d Overrun
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                              On Track (0d)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stages for this product */}
+                      {prod.delaySteps.length > 0 ? (
+                        <div className="space-y-1 pl-1">
+                          {prod.delaySteps.map((step, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-1.5 rounded bg-black/20 text-[11px] font-mono border border-white/5 hover:bg-black/35 transition-colors">
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <span className="text-slate-400 font-bold">#{step.stageOrder}</span>
+                                <span className="text-slate-200 font-medium truncate">{step.stageName.replace(/^\d+\.\s*/, '')}</span>
+                                {step.delayReason && (
+                                  <span className="text-[10px] text-slate-400 italic truncate hidden md:inline">
+                                    — "{step.delayReason}"
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`px-1.5 py-0.2 rounded font-bold ${
+                                  step.isRecovery
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                }`}>
+                                  {step.isRecovery ? `${step.stageDelayAdded}d` : `+${step.stageDelayAdded}d`}
+                                </span>
+                                <span className="text-slate-400 text-[10px]">
+                                  Running: <strong className="text-white">+{step.cumulativeDelay}d</strong>
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-mono text-emerald-400/90 italic py-1 px-2 flex items-center gap-1.5 bg-emerald-500/5 rounded">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span>No delay recorded on this product line — running 100% on schedule.</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* SINGLE PRODUCT OR COMBINED LIST */
                 <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                  {delaySteps.map((step, idx) => (
+                  {displaySteps.map((step, idx) => (
                     <div key={idx} className="flex items-center justify-between p-1.5 rounded bg-white/5 text-[11px] font-mono border border-white/5">
                       <div className="flex items-center gap-2 truncate pr-2">
                         <span className="text-slate-400">#{step.stageOrder}</span>
@@ -649,8 +951,8 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -22,7 +22,24 @@ The schema is ready for MySQL 8/InnoDB. The remaining deployment step is an auth
 
 ## Development
 
-Run `npm install`, then `npm run dev`.
+1. **Start Python FastAPI Backend**:
+   ```bash
+   pip install -r backend/requirements.txt
+   python start_backend.py
+   # or: npm run server:python
+   ```
+2. **Start Frontend (Vite)**:
+   ```bash
+   npm run dev
+   ```
+3. **Run Backend Test Suite**:
+   ```bash
+   python backend/test_api.py
+   ```
+4. **Run E2E Regression Tests**:
+   ```bash
+   npx tsx src/tests/e2eTestRunner.ts
+   ```
 
 The rest of this document is the standard Vite starter reference.
 
