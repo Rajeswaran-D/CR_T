@@ -98,7 +98,7 @@ const ROLE_RESPONSIBLE_MODULE: Record<Role, ModuleType> = {
 export const Sidebar: React.FC<SidebarProps> = ({
   activeModule,
   setActiveModule,
-  delayedCount,
+  delayedCount: _delayedCount,
   delayedSummary
 }) => {
   const { activeRole, setActiveRole } = useApp();
@@ -123,9 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       name: '14. Final Shipment & Dispatch',
       icon: <Truck className="w-4 h-4" />,
-      step: '14',
-      badge: delayedCount > 0 ? delayedCount : undefined,
-      badgeColor: 'bg-rose-100 border-rose-300 text-rose-800'
+      step: '14'
     },
     { name: 'Product Catalog', icon: <Package className="w-4 h-4" /> }
   ];

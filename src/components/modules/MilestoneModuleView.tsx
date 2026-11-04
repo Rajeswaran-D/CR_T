@@ -3,17 +3,17 @@ import { useApp } from '../../context/AppContext';
 import type { MilestoneStatus, DelayCategory, PurchaseOrder, ProductLine, Milestone, Role } from '../../types';
 import { isMilestoneOwnedByRole } from '../../types';
 import { validateEventDate, getDaysDifference, mergeDelayReason, addDays, getMilestoneRevisedDates } from '../../services/calculationEngine';
-import { 
-  Calendar, 
-  CheckCircle2, 
-  Lock, 
-  AlertTriangle, 
-  Play, 
-  Edit3, 
-  Layers, 
-  LayoutGrid, 
-  ChevronDown, 
-  ChevronRight, 
+import {
+  Calendar,
+  CheckCircle2,
+  Lock,
+  AlertTriangle,
+  Play,
+  Edit3,
+  Layers,
+  LayoutGrid,
+  ChevronDown,
+  ChevronRight,
   Sparkles,
   Archive,
   Eye,
@@ -66,7 +66,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
   // Default is 'active' so completed orders do not clutter the work queue
   const [filterTab, setFilterTab] = useState<'active' | 'ready' | 'in_progress' | 'delayed' | 'completed'>('active');
   const [viewMode, setViewMode] = useState<'cards' | 'matrix'>('cards');
-  
+
   // Accordion state
   const [expandedPOs, setExpandedPOs] = useState<Record<string, boolean>>({});
   const [showCompletedLinesInCard, setShowCompletedLinesInCard] = useState<Record<string, boolean>>({});
@@ -76,7 +76,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  
+
   // Local form states per editing card
   const [formData, setFormData] = useState<{
     startDate: string;
@@ -268,7 +268,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const matchesPO = group.po.poNumber.toLowerCase().includes(term) ||
-                        group.po.customerName.toLowerCase().includes(term);
+        group.po.customerName.toLowerCase().includes(term);
       const matchesLine = group.lines.some(l => l.line.productName.toLowerCase().includes(term) || l.line.lineNumber.toLowerCase().includes(term));
       if (!matchesPO && !matchesLine) return false;
     }
@@ -343,7 +343,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
         : (formData.endDate || todayStr);
       const delayReasonToUse = formData.delayReason.trim() || undefined;
       const delayCategoryToUse = formData.delayCategory || undefined;
-      
+
       const compVal = validateEventDate({
         milestones: targetLine.milestones,
         index: msIndex,
@@ -703,7 +703,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      
+
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -739,21 +739,19 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <div className="flex bg-black/30 p-1 rounded-xl border border-white/10 shadow-inner">
             <button
               onClick={() => setViewMode('cards')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                viewMode === 'cards'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${viewMode === 'cards'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
             >
               <Layers className="w-3.5 h-3.5" /> PO Groups &amp; Batch
             </button>
             <button
               onClick={() => setViewMode('matrix')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                viewMode === 'matrix'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${viewMode === 'matrix'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Stage Matrix Grid
             </button>
@@ -831,22 +829,20 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setFilterTab('active')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filterTab === 'active'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${filterTab === 'active'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
+              }`}
           >
             Active Orders ({activePOGroups.length})
           </button>
 
           <button
             onClick={() => setFilterTab('ready')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              filterTab === 'ready'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'ready'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
-            }`}
+              }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             Ready for Action ({activePOGroups.filter(g => g.readyToStartLines > 0 || g.readyToCompleteLines > 0).length})
@@ -854,22 +850,20 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
           <button
             onClick={() => setFilterTab('in_progress')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filterTab === 'in_progress'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${filterTab === 'in_progress'
                 ? 'bg-blue-700 text-white shadow-xs'
                 : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
-            }`}
+              }`}
           >
             In Execution ({activePOGroups.filter(g => g.startedLines > 0).length})
           </button>
 
           <button
             onClick={() => setFilterTab('delayed')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              filterTab === 'delayed'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'delayed'
                 ? 'bg-rose-700 text-white shadow-xs'
                 : 'bg-white text-rose-800 hover:bg-rose-50 border border-rose-200'
-            }`}
+              }`}
           >
             <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
             Delayed ({activePOGroups.filter(g => g.hasDelay).length})
@@ -877,11 +871,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
           <button
             onClick={() => setFilterTab('completed')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              filterTab === 'completed'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'completed'
                 ? 'bg-emerald-900 text-white shadow-xs'
                 : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
-            }`}
+              }`}
           >
             <Archive className="w-3.5 h-3.5 text-slate-400" />
             Completed Archive ({completedPOGroups.length})
@@ -898,7 +891,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
         <div className="space-y-5">
           {filteredPOGroups.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-sm">
-              {filterTab === 'completed' 
+              {filterTab === 'completed'
                 ? `No completed orders found for stage ${stageTitle}.`
                 : `No active orders currently pending action for stage ${stageTitle}. All active work is up to date!`
               }
@@ -920,19 +913,18 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
               return (
                 <div
                   key={po.id}
-                  className={`bg-white border rounded-2xl shadow-xs transition-all overflow-hidden ${
-                    group.isAllCompleted
+                  className={`bg-white border rounded-2xl shadow-xs transition-all overflow-hidden ${group.isAllCompleted
                       ? 'border-emerald-200 bg-emerald-50/10'
                       : hasDelayedProducts
-                      ? 'border-rose-200/80'
-                      : group.startedLines > 0
-                      ? 'border-blue-200/80'
-                      : 'border-slate-200'
-                  }`}
+                        ? 'border-rose-200/80'
+                        : group.startedLines > 0
+                          ? 'border-blue-200/80'
+                          : 'border-slate-200'
+                    }`}
                 >
                   {/* PO Accordion Header */}
                   <div className="p-4 sm:p-5 bg-slate-50/70 border-b border-slate-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    
+
                     {/* Left: PO & Customer Info */}
                     <div className="flex items-start sm:items-center gap-3">
                       <button
@@ -967,7 +959,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
                     {/* Right: Rollup Progress & Batch Action Controls */}
                     <div className="flex flex-wrap items-center gap-2.5 self-end lg:self-center">
-                      
+
                       {/* Rollup Badges */}
                       <div className="flex items-center gap-1.5">
                         {group.completedLines > 0 && (
@@ -1027,7 +1019,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                               title={stageKey === 'corb_release' ? "Record CORB completion date for all lines in one click" : "Complete this stage for all ready lines in one click"}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              {stageKey === 'corb_release' 
+                              {stageKey === 'corb_release'
                                 ? `Complete CORB (${group.lines.filter(l => l.isPrereqDone && !l.isDone).length})`
                                 : `Batch Complete (${group.lines.filter(l => l.isPrereqDone && !l.isDone).length})`}
                             </button>
@@ -1065,10 +1057,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                   {/* Product Lines List inside PO Accordion */}
                   {isExpanded && (
                     <div className="p-4 sm:p-5 space-y-4 bg-white">
-                      
+
                       {/* Bold Root Cause Delay & Multi-Stage Waterfall Breakdown */}
                       <DelayAnalysisFlow po={po} className="shadow-sm" />
-                      
+
                       {/* Sub-header inside card: Toggle between Active Lines only vs All Lines */}
                       {group.completedLines > 0 && activeLines.length > 0 && (
                         <div className="flex items-center justify-between text-xs text-slate-500 pb-1 border-b border-slate-100">
@@ -1130,27 +1122,26 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         );
                         const cardDelayDays = isCardDelayed
                           ? (isEndLate
-                              ? getDaysDifference(bEnd, formData.endDate)
-                              : getDaysDifference(bStart, formData.startDate))
+                            ? getDaysDifference(bEnd, formData.endDate)
+                            : getDaysDifference(bStart, formData.startDate))
                           : 0;
 
                         return (
                           <div
                             key={entryKey}
-                            className={`p-4 rounded-xl border transition-all ${
-                              isDone
+                            className={`p-4 rounded-xl border transition-all ${isDone
                                 ? 'bg-emerald-50/20 border-emerald-200'
                                 : !isPrereqDone
-                                ? 'bg-amber-50/15 border-amber-200/70'
-                                : isStarted
-                                ? 'bg-blue-50/20 border-blue-200'
-                                : isNewDelayHere
-                                ? 'bg-rose-50/20 border-rose-200'
-                                : 'bg-slate-50/50 border-slate-200'
-                            }`}
+                                  ? 'bg-amber-50/15 border-amber-200/70'
+                                  : isStarted
+                                    ? 'bg-blue-50/20 border-blue-200'
+                                    : isNewDelayHere
+                                      ? 'bg-rose-50/20 border-rose-200'
+                                      : 'bg-slate-50/50 border-slate-200'
+                              }`}
                           >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                              
+
                               {/* Product Line Details */}
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
@@ -1206,8 +1197,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                             {isNewDelayHere && prevVar > 0
                                               ? `+${prevVar}d shift from Stage ${prevMilestone?.stageOrder || 'previous'} delay (+${stageDelta}d added here)`
                                               : isNewDelayHere
-                                              ? `+${stageDelta}d delay added at this stage`
-                                              : `+${lineShiftDays}d shift from Stage ${prevMilestone?.stageOrder || 'previous'} delay`}
+                                                ? `+${stageDelta}d delay added at this stage`
+                                                : `+${lineShiftDays}d shift from Stage ${prevMilestone?.stageOrder || 'previous'} delay`}
                                           </span>
                                         ) : (
                                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200">
@@ -1247,20 +1238,19 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                 ) : isDone ? (
                                   <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    {isNewDelayHere 
-                                      ? `Completed (+${stageDelta}d delay added)` 
-                                      : currVar > 0 
-                                      ? (displayResolvedDays > 0 
-                                          ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved, Previous: +${currVar}d)` 
+                                    {isNewDelayHere
+                                      ? `Completed (+${stageDelta}d delay added)`
+                                      : currVar > 0
+                                        ? (displayResolvedDays > 0
+                                          ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved, Previous: +${currVar}d)`
                                           : `Completed (Previous: +${currVar}d)`)
-                                      : displayResolvedDays > 0 
-                                      ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved)` 
-                                      : 'Completed'}
+                                        : displayResolvedDays > 0
+                                          ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved)`
+                                          : 'Completed'}
                                   </span>
                                 ) : isStarted ? (
-                                  <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold border ${
-                                    isNewDelayHere ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-blue-100 text-blue-800 border-blue-300'
-                                  }`}>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold border ${isNewDelayHere ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-blue-100 text-blue-800 border-blue-300'
+                                    }`}>
                                     {isNewDelayHere ? `In Execution (+${stageDelta}d delay added)` : hasInheritedShift ? `In Execution (Previous: +${currVar}d)` : 'In Execution'}
                                   </span>
                                 ) : isNewDelayHere ? (
@@ -1390,9 +1380,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                       <span className={msStartShift > 0 ? "text-amber-800" : "text-emerald-700"}>
                                         Revised Target: <strong className={msStartShift > 0 ? "text-amber-950" : "text-emerald-900"}>{msRevStart} &rarr; {msRevEnd}</strong>
                                       </span>
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                                        msStartShift > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      }`}>
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${msStartShift > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                        }`}>
                                         {msStartShift > 0 ? `+${msStartShift}d shift` : 'On original baseline'}
                                       </span>
                                     </div>
@@ -1606,171 +1595,169 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                     return null;
                                   })()}
 
-                                {isCardDelayed && (
-                                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5 text-xs">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                                        <AlertTriangle className="w-4 h-4 text-amber-600" />
-                                        <span>Schedule Delay Detected (+{cardDelayDays}d late vs baseline target)</span>
-                                      </div>
-                                      {(() => {
-                                        const netInheritedDelay = activeInheritedDelay;
-                                        if (netInheritedDelay <= 0) return null;
+                                  {isCardDelayed && (
+                                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5 text-xs">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                          <span>Schedule Delay Detected (+{cardDelayDays}d late vs baseline target)</span>
+                                        </div>
+                                        {(() => {
+                                          const netInheritedDelay = activeInheritedDelay;
+                                          if (netInheritedDelay <= 0) return null;
 
+                                          const prevMilestones = (line.milestones || []).slice(0, msIndex);
+                                          const prevLineDelays = prevMilestones
+                                            .map(m => {
+                                              let days = 0;
+                                              if (m.actualEndDate && m.committedBaselineEndDate) {
+                                                days = Math.max(0, getDaysDifference(m.committedBaselineEndDate, m.actualEndDate));
+                                              } else if (typeof m.varianceDays === 'number' && m.varianceDays > 0) {
+                                                days = m.varianceDays;
+                                              }
+                                              return { ...m, calculatedDelayDays: days };
+                                            })
+                                            .filter(m => m.calculatedDelayDays > 0);
+
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const breakdown = prevLineDelays.map(d => `Stage ${d.stageOrder}: +${d.calculatedDelayDays}d`).join(', ');
+                                                const summaryText = `Inherited delay: +${netInheritedDelay}d${breakdown ? ` (${breakdown})` : ''}`;
+                                                setFormData(prev => ({
+                                                  ...prev,
+                                                  delayReason: mergeDelayReason(prev.delayReason, summaryText),
+                                                  delayCategory: prev.delayCategory || prevLineDelays[prevLineDelays.length - 1]?.delayCategory || ''
+                                                }));
+                                              }}
+                                              className="text-[10px] text-emerald-900 bg-white hover:bg-emerald-50 border border-emerald-300 font-bold px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
+                                            >
+                                              Append Previous Delays (+{netInheritedDelay}d)
+                                            </button>
+                                          );
+                                        })()}
+                                      </div>
+
+                                      {(() => {
+                                        if (activeInheritedDelay <= 0) return null;
                                         const prevMilestones = (line.milestones || []).slice(0, msIndex);
                                         const prevLineDelays = prevMilestones
-                                          .map(m => {
-                                            let days = 0;
-                                            if (m.actualEndDate && m.committedBaselineEndDate) {
-                                              days = Math.max(0, getDaysDifference(m.committedBaselineEndDate, m.actualEndDate));
-                                            } else if (typeof m.varianceDays === 'number' && m.varianceDays > 0) {
-                                              days = m.varianceDays;
-                                            }
-                                            return { ...m, calculatedDelayDays: days };
+                                          .map((m, mIdx) => {
+                                            const prevM = mIdx > 0 ? prevMilestones[mIdx - 1] : null;
+                                            const currVar = Math.max(0, typeof m.varianceDays === 'number' ? m.varianceDays : 0);
+                                            const prevVar = prevM ? Math.max(0, typeof prevM.varianceDays === 'number' ? prevM.varianceDays : 0) : 0;
+                                            const stageDelta = currVar - prevVar;
+                                            return { ...m, calculatedDelayDays: stageDelta };
                                           })
                                           .filter(m => m.calculatedDelayDays > 0);
 
+                                        if (prevLineDelays.length === 0) return null;
+
                                         return (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const breakdown = prevLineDelays.map(d => `Stage ${d.stageOrder}: +${d.calculatedDelayDays}d`).join(', ');
-                                              const summaryText = `Inherited delay: +${netInheritedDelay}d${breakdown ? ` (${breakdown})` : ''}`;
-                                              setFormData(prev => ({
-                                                ...prev,
-                                                delayReason: mergeDelayReason(prev.delayReason, summaryText),
-                                                delayCategory: prev.delayCategory || prevLineDelays[prevLineDelays.length - 1]?.delayCategory || ''
-                                              }));
-                                            }}
-                                            className="text-[10px] text-emerald-900 bg-white hover:bg-emerald-50 border border-emerald-300 font-bold px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
-                                          >
-                                            Append Previous Delays (+{netInheritedDelay}d)
-                                          </button>
+                                          <div className="p-2 bg-amber-100/60 border border-amber-200/80 rounded-lg space-y-0.5 text-[10px] font-mono text-amber-900">
+                                            <div className="font-bold text-amber-950">Preceding Delay Sources:</div>
+                                            {prevLineDelays.map((d, i) => (
+                                              <div key={i} className="truncate">
+                                                • Stage {d.stageOrder}: {d.name.replace(/^\d+\.\s*/, '')}: <strong className="text-rose-700">+{d.calculatedDelayDays}d Delay Added</strong>
+                                                {d.delayReason && <span className="text-slate-600 font-normal"> — {d.delayReason}</span>}
+                                              </div>
+                                            ))}
+                                            <div className="pt-0.5 font-bold text-amber-950 border-t border-amber-200/60 flex justify-between">
+                                              <span>Total Cumulative Delay:</span>
+                                              <span className="text-rose-700">+{activeInheritedDelay}d</span>
+                                            </div>
+                                          </div>
                                         );
                                       })()}
-                                    </div>
 
-                                    {(() => {
-                                      if (activeInheritedDelay <= 0) return null;
-                                      const prevMilestones = (line.milestones || []).slice(0, msIndex);
-                                      const prevLineDelays = prevMilestones
-                                        .map((m, mIdx) => {
-                                          const prevM = mIdx > 0 ? prevMilestones[mIdx - 1] : null;
-                                          const currVar = Math.max(0, typeof m.varianceDays === 'number' ? m.varianceDays : 0);
-                                          const prevVar = prevM ? Math.max(0, typeof prevM.varianceDays === 'number' ? prevM.varianceDays : 0) : 0;
-                                          const stageDelta = currVar - prevVar;
-                                          return { ...m, calculatedDelayDays: stageDelta };
-                                        })
-                                        .filter(m => m.calculatedDelayDays > 0);
-
-                                      if (prevLineDelays.length === 0) return null;
-
-                                      return (
-                                        <div className="p-2 bg-amber-100/60 border border-amber-200/80 rounded-lg space-y-0.5 text-[10px] font-mono text-amber-900">
-                                          <div className="font-bold text-amber-950">Preceding Delay Sources:</div>
-                                          {prevLineDelays.map((d, i) => (
-                                            <div key={i} className="truncate">
-                                              • Stage {d.stageOrder}: {d.name.replace(/^\d+\.\s*/, '')}: <strong className="text-rose-700">+{d.calculatedDelayDays}d Delay Added</strong>
-                                              {d.delayReason && <span className="text-slate-600 font-normal"> — {d.delayReason}</span>}
-                                            </div>
-                                          ))}
-                                          <div className="pt-0.5 font-bold text-amber-950 border-t border-amber-200/60 flex justify-between">
-                                            <span>Total Cumulative Delay:</span>
-                                            <span className="text-rose-700">+{activeInheritedDelay}d</span>
-                                          </div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-amber-900 mb-1">
+                                            Delay Category <span className="text-slate-400 font-normal">(Optional)</span>
+                                          </label>
+                                          <select
+                                            value={formData.delayCategory}
+                                            onChange={e => setFormData(prev => ({ ...prev, delayCategory: e.target.value as DelayCategory }))}
+                                            className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-white"
+                                          >
+                                            <option value="">Select Category (Optional)...</option>
+                                            {prevMilestone && <option value="Internal">Preceding Stage Delay ({prevMilestone.name})</option>}
+                                            <option value="Customer">Customer Dependency</option>
+                                            <option value="Supplier">Supplier Delay</option>
+                                            <option value="Internal">Internal Resource Deficit</option>
+                                            <option value="Design">Technical / Design Complexity</option>
+                                            <option value="Production">Production / Inspection Hold</option>
+                                          </select>
                                         </div>
-                                      );
-                                    })()}
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      <div>
-                                        <label className="block text-[10px] font-bold text-amber-900 mb-1">
-                                          Delay Category <span className="text-slate-400 font-normal">(Optional)</span>
-                                        </label>
-                                        <select
-                                          value={formData.delayCategory}
-                                          onChange={e => setFormData(prev => ({ ...prev, delayCategory: e.target.value as DelayCategory }))}
-                                          className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-white"
-                                        >
-                                          <option value="">Select Category (Optional)...</option>
-                                          {prevMilestone && <option value="Internal">Preceding Stage Delay ({prevMilestone.name})</option>}
-                                          <option value="Customer">Customer Dependency</option>
-                                          <option value="Supplier">Supplier Delay</option>
-                                          <option value="Internal">Internal Resource Deficit</option>
-                                          <option value="Design">Technical / Design Complexity</option>
-                                          <option value="Production">Production / Inspection Hold</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-[10px] font-bold text-amber-900 mb-1">
-                                          Delay Reason <span className="text-slate-400 font-normal">(Optional)</span>
-                                        </label>
-                                        <input
-                                          type="text"
-                                          placeholder="Enter delay justification (Optional)..."
-                                          value={formData.delayReason}
-                                          onChange={e => setFormData(prev => ({ ...prev, delayReason: e.target.value }))}
-                                          className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-white"
-                                        />
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-amber-900 mb-1">
+                                            Delay Reason <span className="text-slate-400 font-normal">(Optional)</span>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            placeholder="Enter delay justification (Optional)..."
+                                            value={formData.delayReason}
+                                            onChange={e => setFormData(prev => ({ ...prev, delayReason: e.target.value }))}
+                                            className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-white"
+                                          />
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
 
-                                {(() => {
-                                  const prevFloor = stageOrder > 1 ? (prevMilestone?.actualEndDate || prevMilestone?.forecastEndDate) : null;
-                                  const isStartInvalid = Boolean(
-                                    stageOrder > 1 && prevFloor && (
-                                      (formData.startDate && formData.startDate < prevFloor) ||
-                                      (formData.orderedDate && formData.orderedDate < prevFloor)
-                                    )
-                                  );
+                                  {(() => {
+                                    const prevFloor = stageOrder > 1 ? (prevMilestone?.actualEndDate || prevMilestone?.forecastEndDate) : null;
+                                    const isStartInvalid = Boolean(
+                                      stageOrder > 1 && prevFloor && (
+                                        (formData.startDate && formData.startDate < prevFloor) ||
+                                        (formData.orderedDate && formData.orderedDate < prevFloor)
+                                      )
+                                    );
 
-                                  return (
-                                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingKey(null)}
-                                        className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
-                                      >
-                                        Cancel
-                                      </button>
-                                      {!milestone.actualStartDate ? (
+                                    return (
+                                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                                         <button
                                           type="button"
-                                          disabled={isStartInvalid}
-                                          onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, false)}
-                                          className={`px-3.5 py-1.5 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-2xs ${
-                                            !isStartInvalid ? 'bg-slate-800 hover:bg-slate-900 cursor-pointer' : 'bg-slate-400 cursor-not-allowed'
-                                          }`}
+                                          onClick={() => setEditingKey(null)}
+                                          className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
                                         >
-                                          <Play className="w-3 h-3 fill-current" /> Save & Start Stage
+                                          Cancel
                                         </button>
-                                      ) : (
+                                        {!milestone.actualStartDate ? (
+                                          <button
+                                            type="button"
+                                            disabled={isStartInvalid}
+                                            onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, false)}
+                                            className={`px-3.5 py-1.5 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-2xs ${!isStartInvalid ? 'bg-slate-800 hover:bg-slate-900 cursor-pointer' : 'bg-slate-400 cursor-not-allowed'
+                                              }`}
+                                          >
+                                            <Play className="w-3 h-3 fill-current" /> Save & Start Stage
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled={isStartInvalid}
+                                            onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, false)}
+                                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 ${!isStartInvalid ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 cursor-pointer' : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                              }`}
+                                          >
+                                            <Edit3 className="w-3.5 h-3.5" /> Save Start Date
+                                          </button>
+                                        )}
                                         <button
                                           type="button"
-                                          disabled={isStartInvalid}
-                                          onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, false)}
-                                          className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 ${
-                                            !isStartInvalid ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 cursor-pointer' : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                          }`}
+                                          onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, true)}
+                                          className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg cursor-pointer shadow-xs flex items-center gap-1"
                                         >
-                                          <Edit3 className="w-3.5 h-3.5" /> Save Start Date
+                                          <CheckCircle2 className="w-3.5 h-3.5" /> Record Complete
                                         </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveStageUpdate(po.id, line.id, milestone.key, true)}
-                                        className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg cursor-pointer shadow-xs flex items-center gap-1"
-                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5" /> Record Complete
-                                      </button>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            );
-                          })()}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              );
+                            })()}
 
                           </div>
                         );
@@ -1813,9 +1800,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                     return (
                       <th
                         key={st.key}
-                        className={`py-3 px-2 text-center text-[10px] whitespace-nowrap ${
-                          isCurrentStageCol ? 'bg-emerald-100 text-emerald-950 font-black border-x border-emerald-300' : ''
-                        }`}
+                        className={`py-3 px-2 text-center text-[10px] whitespace-nowrap ${isCurrentStageCol ? 'bg-emerald-100 text-emerald-950 font-black border-x border-emerald-300' : ''
+                          }`}
                       >
                         {st.label}
                       </th>
@@ -1860,22 +1846,20 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                           return (
                             <td
                               key={st.key}
-                              className={`py-2 px-1 text-center ${
-                                isCurrentStageCol ? 'bg-emerald-50/50 border-x border-emerald-200' : ''
-                              }`}
+                              className={`py-2 px-1 text-center ${isCurrentStageCol ? 'bg-emerald-50/50 border-x border-emerald-200' : ''
+                                }`}
                             >
                               <span
-                                className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-mono font-bold transition-transform hover:scale-110 cursor-pointer ${
-                                  isStageDone
+                                className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-mono font-bold transition-transform hover:scale-110 cursor-pointer ${isStageDone
                                     ? 'bg-emerald-600 text-white shadow-2xs'
                                     : isStageStarted
-                                    ? isStageDelayed
-                                      ? 'bg-blue-600 text-white ring-2 ring-rose-400'
-                                      : 'bg-blue-600 text-white ring-2 ring-blue-300'
-                                    : isStageDelayed
-                                    ? 'bg-rose-500 text-white ring-1 ring-rose-300'
-                                    : 'bg-slate-200 text-slate-500'
-                                }`}
+                                      ? isStageDelayed
+                                        ? 'bg-blue-600 text-white ring-2 ring-rose-400'
+                                        : 'bg-blue-600 text-white ring-2 ring-blue-300'
+                                      : isStageDelayed
+                                        ? 'bg-rose-500 text-white ring-1 ring-rose-300'
+                                        : 'bg-slate-200 text-slate-500'
+                                  }`}
                                 title={`${st.label}: ${ms?.status || 'Pending'} (${ms?.actualEndDate || ms?.forecastEndDate || 'Planned'})`}
                               >
                                 {isStageDone ? 'Done' : isStageStarted ? 'In Prog' : isStageDelayed ? 'Delay' : sIdx + 1}
@@ -1933,7 +1917,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
       {batchModal.isOpen && batchModal.po && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-800">
-            
+
             {/* Modal Header */}
             <div className="bg-slate-900 p-5 text-white flex items-center justify-between shrink-0">
               <div>
@@ -1964,7 +1948,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
             {/* Modal Body */}
             <div className="p-4 sm:p-6 space-y-4 text-xs flex-1 overflow-y-auto min-h-0">
-              
+
               {errorMessage && (
                 <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 font-medium flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -1976,8 +1960,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                    {batchModal.selectedLineIds.length === 1 
-                      ? 'Target Product Line' 
+                    {batchModal.selectedLineIds.length === 1
+                      ? 'Target Product Line'
                       : `Select Product Lines to Apply (${batchModal.selectedLineIds.length}/${batchModal.po.productLines.length})`
                     }
                   </label>
@@ -2015,11 +1999,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                     return (
                       <label
                         key={line.id}
-                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${
-                          !isPrereqDone ? 'opacity-50 bg-slate-100 border-slate-200 cursor-not-allowed' :
-                          isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold' :
-                          'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
+                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${!isPrereqDone ? 'opacity-50 bg-slate-100 border-slate-200 cursor-not-allowed' :
+                            isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold' :
+                              'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <input
@@ -2066,7 +2049,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
 
               {/* Date Inputs & Schedule Context */}
               {(() => {
-                const selectedLine = (batchModal.selectedLineIds.length > 0 
+                const selectedLine = (batchModal.selectedLineIds.length > 0
                   ? batchModal.po.productLines.find(l => batchModal.selectedLineIds.includes(l.id))
                   : null) || batchModal.po.productLines[0];
 
@@ -2095,10 +2078,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                 const canonicalDates = selectedMs
                   ? getMilestoneRevisedDates(selectedMs, samplePrevMs, batchModal.po.poDate, batchModal.po.committedDeliveryDate)
                   : {
-                      revisedStart: defaultRevStart,
-                      revisedEnd: msPlanEnd,
-                      shiftDays: (chainedEarliestStart && msPlanStart && chainedEarliestStart > msPlanStart) ? getDaysDifference(msPlanStart, chainedEarliestStart) : 0
-                    };
+                    revisedStart: defaultRevStart,
+                    revisedEnd: msPlanEnd,
+                    shiftDays: (chainedEarliestStart && msPlanStart && chainedEarliestStart > msPlanStart) ? getDaysDifference(msPlanStart, chainedEarliestStart) : 0
+                  };
 
                 const msRevStart = canonicalDates.revisedStart || defaultRevStart;
                 const msRevEnd = canonicalDates.revisedEnd || msPlanEnd;
@@ -2324,9 +2307,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         <span className={sampleShiftDays > 0 ? "text-amber-800" : "text-emerald-700"}>
                           Revised Target: <strong className={sampleShiftDays > 0 ? "text-amber-950" : "text-emerald-900"}>{msRevStart} &rarr; {msRevEnd}</strong>
                         </span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                          sampleShiftDays > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        }`}>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${sampleShiftDays > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          }`}>
                           {sampleShiftDays > 0 ? `+${sampleShiftDays}d shift` : 'On original baseline'}
                         </span>
                       </div>
@@ -2339,7 +2321,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
               {(() => {
                 const livePO = purchaseOrders.find(p => p.id === batchModal.po?.id) || batchModal.po;
                 const selectedLines = livePO ? livePO.productLines.filter(l => batchModal.selectedLineIds.includes(l.id)) : [];
-                
+
                 const allPreviousDelays = selectedLines.flatMap(l => {
                   const idx = (l.milestones || []).findIndex(m => m.key === stageKey);
                   const preceding = (l.milestones || []).slice(0, idx);
@@ -2534,7 +2516,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         <div className="flex items-center gap-2 font-bold text-emerald-950 text-[11px]">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span>
-                            {displayResolved > 0 
+                            {displayResolved > 0
                               ? `Schedule Accelerated: +${displayResolved}d Delay Resolved! (${displayResolved === 1 ? '1 day' : `${displayResolved} days`} ahead of planned target)`
                               : `Schedule Status: On Track — Selected date is within planned schedule.`}
                           </span>
@@ -2753,14 +2735,13 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       type="button"
                       disabled={isDisabled}
                       onClick={handleExecuteBatch}
-                      className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                        !isDisabled
+                      className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${!isDisabled
                           ? 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'
                           : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      }`}
+                        }`}
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      {batchModal.selectedLineIds.length === 1 
+                      {batchModal.selectedLineIds.length === 1
                         ? `Confirm & Record ${batchModal.mode === 'start' ? 'Start' : 'Complete'}`
                         : `Apply to ${batchModal.selectedLineIds.length} Product Line(s)`
                       }
