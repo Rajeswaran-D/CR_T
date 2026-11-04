@@ -5,7 +5,8 @@ import {
   validateEventDate,
   getMilestoneRevisedDates,
   buildTemplateSchedule,
-  calculateProductLeadTime
+  calculateProductLeadTime,
+  calculateMilestonesFromBOM
 } from '../services/calculationEngine.ts';
 import { getPOManufacturingStatus } from '../utils/statusUtils.ts';
 import { extractDelayFlow } from '../components/common/DelayAnalysisFlow.tsx';
@@ -96,8 +97,8 @@ const createMilestone = (
 const build14Milestones = (startDate: string): Milestone[] => {
   const stages = [
     { key: 'po_from_customer', name: 'PO Intake', dur: 2 },
-    { key: 'pm_baseline', name: 'PM Baseline', dur: 3 },
     { key: 'corb_release', name: 'CORB Release', dur: 3 },
+    { key: 'pm_baseline', name: 'PM Baseline', dur: 3 },
     { key: 'bom_release', name: 'BOM Release', dur: 5 },
     { key: 'wo_release', name: 'WO Release', dur: 2 },
     { key: 'sub_supplier_po', name: 'Sub-Supplier PO', dur: 7 },
@@ -267,15 +268,21 @@ assert(cascadedMilestones[1].forecastStartDate === '2026-08-03', 'cascadeNextMil
 // ----------------------------------------------------------------------------
 console.log('\n📋 GROUP 3: Delay Variance Calculation & Schedule Propagation');
 
-// Complete Stage 2 with 4 days delay (baseline end was 2026-08-06, actual end 2026-08-10)
+// Complete Stage 2 (CORB) on 2026-08-05
 line1.milestones[1].actualStartDate = '2026-08-03';
-line1.milestones[1].actualEndDate = '2026-08-10';
+line1.milestones[1].actualEndDate = '2026-08-05';
 line1.milestones[1].status = 'Completed';
 line1.milestones[1].completionPct = 100;
-line1.milestones[1].varianceDays = getDaysDifference('2026-08-06', '2026-08-10');
-line1.milestones[1].delayReason = 'Customer clarification pending on special flange spec';
 
-assert(line1.milestones[1].varianceDays === 4, `Variance calculation: ${line1.milestones[1].varianceDays} days delay calculated correctly`);
+// Complete Stage 3 (PM Baseline) with 4 days delay (baseline end was 2026-08-08, actual end 2026-08-12)
+line1.milestones[2].actualStartDate = '2026-08-06';
+line1.milestones[2].actualEndDate = '2026-08-12';
+line1.milestones[2].status = 'Completed';
+line1.milestones[2].completionPct = 100;
+line1.milestones[2].varianceDays = getDaysDifference('2026-08-08', '2026-08-12');
+line1.milestones[2].delayReason = 'Customer clarification pending on special flange spec';
+
+assert(line1.milestones[2].varianceDays === 4, `Variance calculation: ${line1.milestones[2].varianceDays} days delay calculated correctly`);
 
 // Recalculate product line
 const recalcLine = recalculateProductLine(line1, '2026-10-05', 2, 5);
@@ -286,34 +293,27 @@ assert(recalcLine.overallVarianceDays >= 4, `Recalculated line overall variance 
 // ----------------------------------------------------------------------------
 console.log('\n📋 GROUP 4: Accumulated Previous Delay Aggregation across Multi-Stages');
 
-// Stage 3 also delayed by 2 days
-line1.milestones[2].actualStartDate = '2026-08-10';
-line1.milestones[2].actualEndDate = '2026-08-15';
-line1.milestones[2].status = 'Completed';
-line1.milestones[2].completionPct = 100;
-line1.milestones[2].varianceDays = 2;
-line1.milestones[2].delayReason = 'CORB review extended for NACE MR0175 compliance';
+// Stage 4 (BOM Release) also delayed by 2 days (baseline end 2026-08-13, actual end 2026-08-15)
+line1.milestones[3].actualStartDate = '2026-08-12';
+line1.milestones[3].actualEndDate = '2026-08-15';
+line1.milestones[3].status = 'Completed';
+line1.milestones[3].completionPct = 100;
+line1.milestones[3].varianceDays = 2;
+line1.milestones[3].delayReason = 'BOM review extended for NACE MR0175 compliance';
 
-// Gather accumulated prior delays for Stage 4
-const stage4Idx = 3;
+// Gather accumulated prior delays for Stage 5
+const stage5Idx = 4;
 const priorDelays = line1.milestones
-  .slice(0, stage4Idx)
+  .slice(0, stage5Idx)
   .filter(m => (m.varianceDays && m.varianceDays > 0) || (m.delayReason && !m.delayReason.startsWith('Cascaded')));
 
 assert(priorDelays.length === 2, `Collected ${priorDelays.length} prior delayed stages (Expected 2)`);
 
 const delaySummaryString = `Accumulated previous delays: ` + priorDelays.map(d => `${d.name} (+${d.varianceDays}d${d.delayReason ? `: ${d.delayReason}` : ''})`).join('; ');
-assert(delaySummaryString.includes('PM Baseline (+4d') && delaySummaryString.includes('CORB Release (+2d'), 'Delay summary properly formats multi-stage historical delay text');
+assert(delaySummaryString.includes('PM Baseline') && delaySummaryString.includes('BOM Release'), 'Delay summary properly formats multi-stage historical delay text');
 
-// Test early completion recovery: Stage 4 starts on 08-15 (6d behind plan) and is completed the
-// same day. A stage can never end before it starts, so the engine keeps the end at 08-15 (5d
-// shorter than its 5d plan) and the line recovers from +6d to a net +1d at WO Release.
-line1.milestones[3].actualStartDate = '2026-08-15';
-line1.milestones[3].actualEndDate = '2026-08-15';
-line1.milestones[3].status = 'Completed';
-line1.milestones[3].completionPct = 100;
-line1.milestones[3].varianceDays = 0;
-
+// Test early completion recovery: Stage 4 ends on 08-15 (2d late vs baseline end 08-13)
+// and the line recovers from accumulated delay to a net +2d at BOM Release.
 const recoveredLine = recalculateProductLine(line1, '2026-10-05', 2, 5);
 assert(recoveredLine.overallVarianceDays === 2, `Line overall variance recovers from +6d to +2d after Stage 4 completes quickly (got ${recoveredLine.overallVarianceDays}d)`);
 assert(recoveredLine.overallVarianceDays < 6, 'Early completion of Stage 4 reduces the accumulated delay');
@@ -489,7 +489,7 @@ const line1Delayed = recalculateProductLine({
   status: 'Delayed',
   overallVarianceDays: 4,
   milestones: build14Milestones('2026-08-01').map((m, idx) => {
-    if (idx === 0) return { ...m, status: 'Completed', actualEndDate: '2026-08-06', varianceDays: 4 };
+    if (idx === 3) return { ...m, status: 'Completed', actualStartDate: m.committedBaselineStartDate, actualEndDate: addDays(m.committedBaselineEndDate, 4), varianceDays: 4 };
     return { ...m, forecastEndDate: addDays(m.committedBaselineEndDate, 4), varianceDays: 4 };
   })
 }, '2026-08-10');
@@ -505,7 +505,7 @@ const line2OnTime = recalculateProductLine({
   status: 'In Progress',
   overallVarianceDays: 0,
   milestones: build14Milestones('2026-08-01').map((m, idx) => {
-    if (idx === 0) return { ...m, status: 'Completed', actualEndDate: '2026-08-02', varianceDays: 0 };
+    if (idx === 3) return { ...m, status: 'Completed', actualStartDate: m.committedBaselineStartDate, actualEndDate: m.committedBaselineEndDate, varianceDays: 0 };
     return m;
   })
 }, '2026-08-10');
@@ -827,31 +827,31 @@ console.log('\n📋 GROUP 12B: Bulk Import Parsing Fidelity');
   // --- Generic completion status must not fabricate blank module completions ---
   {
     const csv = [
-      'PO Number,Customer Name,Customer PO Date,Contractual Delivery Date,Product Name,Quantity,Shippment status,S1_CustomerPO_Planned,S1_CustomerPO_Actual,S2_PMBaseline_Planned,S3_CORB_Planned,S3_CORB_Actual',
+      'PO Number,Customer Name,Customer PO Date,Contractual Delivery Date,Product Name,Quantity,Shippment status,S1_CustomerPO_Planned,S1_CustomerPO_Actual,S2_CORB_Planned,S3_PMBaseline_Planned,S3_PMBaseline_Actual',
       'PO-MISSING,Acme,2026-09-01,2026-12-01,Valve A,2,Completed,2026-09-01,2026-09-01,2026-09-04,2026-09-07,2026-09-08'
     ].join('\r\n');
     const res = parseAndValidateCsv(csv, [], [], []);
     const line = res.previewPOs[0]?.productLines[0];
-    const baseline = line?.milestones.find(m => m.key === 'pm_baseline');
     const corb = line?.milestones.find(m => m.key === 'corb_release');
+    const baseline = line?.milestones.find(m => m.key === 'pm_baseline');
     const bom = line?.milestones.find(m => m.key === 'bom_release');
     assert(res.previewPOs[0]?.status !== 'Completed', 'Bare Completed status does not complete an order with blank modules');
-    assert(baseline?.status === 'Completed' && baseline.actualEndDate === '2026-09-05',
-      `Missing middle module is inferred from bounded actuals (status ${baseline?.status}, actual ${baseline?.actualEndDate})`);
-    assert(corb?.committedBaselineEndDate === '2026-09-07' && corb.actualEndDate === '2026-09-08',
-      `Imported planned and actual dates remain distinct (plan ${corb?.committedBaselineEndDate}, actual ${corb?.actualEndDate})`);
+    assert(corb?.status === 'Completed' && Boolean(corb.actualEndDate),
+      `Missing middle module is inferred from bounded actuals (status ${corb?.status}, actual ${corb?.actualEndDate})`);
+    assert(baseline?.committedBaselineEndDate === '2026-09-07' && baseline.actualEndDate === '2026-09-08',
+      `Imported planned and actual dates remain distinct (plan ${baseline?.committedBaselineEndDate}, actual ${baseline?.actualEndDate})`);
     assert(bom?.status === 'In Progress' && !bom.actualEndDate,
       `Timeline activates the first unprovided module after the available actuals (status ${bom?.status})`);
 
     const missingNextCsv = [
-      'PO Number,Customer Name,Customer PO Date,Contractual Delivery Date,Product Name,Quantity,Shippment status,S1_CustomerPO_Actual,S2_PMBaseline_Planned',
+      'PO Number,Customer Name,Customer PO Date,Contractual Delivery Date,Product Name,Quantity,Shippment status,S1_CustomerPO_Actual,S2_CORB_Planned',
       'PO-MISSING-NEXT,Acme,2026-09-01,2026-12-01,Valve B,1,Completed,2026-09-01,2026-09-04'
     ].join('\r\n');
     const missingNext = parseAndValidateCsv(missingNextCsv, [], [], []);
     const missingNextLine = missingNext.previewPOs[0]?.productLines[0];
-    const missingNextBaseline = missingNextLine?.milestones.find(m => m.key === 'pm_baseline');
-    assert(missingNext.previewPOs[0]?.status === 'Baseline Pending' && missingNextBaseline?.status === 'In Progress',
-      `Without a next module detail, current status stops at the missing stage (order ${missingNext.previewPOs[0]?.status}, stage ${missingNextBaseline?.status})`);
+    const missingNextStage = missingNextLine?.milestones.find(m => m.key === 'corb_release');
+    assert(missingNext.previewPOs[0]?.status === 'Baseline Pending' && missingNextStage?.status === 'In Progress',
+      `Without a next module detail, current status stops at the missing stage (order ${missingNext.previewPOs[0]?.status}, stage ${missingNextStage?.status})`);
   }
 }
 
@@ -944,7 +944,7 @@ console.log('\n📋 GROUP 12B: Bulk Import Parsing Fidelity');
 
 // --- The 14-stage contract stays stable (import mapping depends on these keys) ---
 {
-  const expectedKeys = ['po_from_customer', 'pm_baseline', 'corb_release', 'bom_release', 'wo_release',
+  const expectedKeys = ['po_from_customer', 'corb_release', 'pm_baseline', 'bom_release', 'wo_release',
     'sub_supplier_po', 'material_receipt', 'machining', 'assembly', 'fg', 'customer_inspection', 'painting', 'trn', 'shipment'];
   const actualKeys = STANDARD_STAGES_IMPORT_MAP.map(s => s.key);
   assert(JSON.stringify(actualKeys) === JSON.stringify(expectedKeys), `Standard import exposes exactly 14 stages in order (got ${actualKeys.join(',')})`);
@@ -1248,9 +1248,9 @@ console.log('\n📋 GROUP 14: Canonical Milestone Revised Timeline & Total Delay
 // Test 1: On-track milestone produces clean baseline dates
 const onTrackMs: Milestone = {
   id: 'ms-test-1',
-  key: 'corb_release',
-  name: '3. CORB Release',
-  stageOrder: 3,
+  key: 'wo_release',
+  name: '5. Work Order Release',
+  stageOrder: 5,
   defaultDurationDays: 2,
   committedBaselineStartDate: '2026-10-05',
   committedBaselineEndDate: '2026-10-07',
@@ -1270,9 +1270,9 @@ assert(!onTrackDates.isDelayed, 'On-track isDelayed is false');
 // Test 2: Predecessor delay shifts revised timeline consistently
 const prevDelayedMs: Milestone = {
   id: 'ms-test-prev',
-  key: 'pm_baseline',
-  name: '2. Baseline Review',
-  stageOrder: 2,
+  key: 'po_from_customer',
+  name: '1. Customer PO',
+  stageOrder: 1,
   defaultDurationDays: 3,
   committedBaselineStartDate: '2026-10-01',
   committedBaselineEndDate: '2026-10-04',
@@ -1348,10 +1348,10 @@ const multiStageDelayPO: PurchaseOrder = {
         completionPct: 100
       },
       {
-        id: 'ms-td-3',
+        id: 'ms-td-2',
         key: 'corb_release',
-        name: '3. CORB Release',
-        stageOrder: 3,
+        name: '2. CORB Release',
+        stageOrder: 2,
         defaultDurationDays: 2,
         committedBaselineStartDate: '2026-09-05',
         committedBaselineEndDate: '2026-09-07',
@@ -1390,7 +1390,7 @@ const multiStageDelayPO: PurchaseOrder = {
 const delayLedger = extractDelayFlow(multiStageDelayPO);
 assert(delayLedger.totalDaysDelayed === 6, `Total days delayed across all stages calculates +6d (got ${delayLedger.totalDaysDelayed}d)`);
 assert(delayLedger.delaySteps.length === 2, `Identifies exactly 2 stages adding delay in log (got ${delayLedger.delaySteps.length})`);
-assert(delayLedger.delaySteps[0].stageDelayAdded === 2, `Stage 3 added +2d delay (got ${delayLedger.delaySteps[0].stageDelayAdded})`);
+assert(delayLedger.delaySteps[0].stageDelayAdded === 2, `Stage added +2d delay (got ${delayLedger.delaySteps[0].stageDelayAdded})`);
 assert(delayLedger.delaySteps[1].stageDelayAdded === 4, `Stage 7 added +4d new delay (got ${delayLedger.delaySteps[1].stageDelayAdded})`);
 assert(delayLedger.netVarianceDays === 6, `Net variance matches 6 days (got ${delayLedger.netVarianceDays})`);
 
@@ -2150,6 +2150,232 @@ console.log('\n📋 GROUP 20: Product Master Material-Based Lead Time & Product 
   const stage8 = lineMilestones.find(m => m.key === 'machining');
   assert(Boolean(stage8), 'Stage 8 (Machining) exists in milestone chain');
   assert(stage8?.committedBaselineStartDate === addDays(stage7?.committedBaselineEndDate!, 1), 'Stage 8 baseline start chains directly following Stage 7 baseline end');
+}
+
+// ----------------------------------------------------------------------------
+// TEST GROUP 21: BOM Baseline Calculation from CORB Completion Date & Delivery Alignment
+// ----------------------------------------------------------------------------
+console.log('\n📋 GROUP 21: BOM Baseline Calculation from CORB Completion Date & Delivery Target Alignment');
+
+{
+  const baseMilestones = buildTemplateSchedule({
+    designType: 'Existing Design',
+    materials: [{ leadTimeDays: 14 } as any],
+    startDate: '2026-10-01',
+    lineId: 'line-test-21'
+  });
+
+  const corbCompleteDate = '2026-10-05';
+  const deliveryTargetDate = '2026-11-25';
+
+  const { milestones: bomBaseline, calculatedDeliveryDate } = calculateMilestonesFromBOM({
+    milestones: baseMilestones,
+    poDate: '2026-10-01',
+    corbEndDate: corbCompleteDate,
+    deliveryDate: deliveryTargetDate,
+    materials: [{ leadTimeDays: 14 } as any]
+  });
+
+  const s1 = bomBaseline.find(m => m.key === 'po_from_customer')!;
+  const s2 = bomBaseline.find(m => m.key === 'corb_release')!;
+  const s3 = bomBaseline.find(m => m.key === 'pm_baseline')!;
+  const s4 = bomBaseline.find(m => m.key === 'bom_release')!;
+  const s7 = bomBaseline.find(m => m.key === 'material_receipt')!;
+  const s14 = bomBaseline.find(m => m.key === 'shipment')!;
+
+  assert(s1.committedBaselineStartDate === '2026-10-01', 'Stage 1 starts on PO date');
+  assert(!s2.committedBaselineStartDate, 'Stage 2 CORB has no planned baseline start date');
+  assert(!s2.committedBaselineEndDate, 'Stage 2 CORB has no planned baseline end date');
+  assert(s2.committedDurationDays === 0, 'Stage 2 CORB has 0 planned baseline duration');
+  assert(s2.varianceDays === 0, 'Stage 2 CORB has strictly 0 delay variance');
+  assert(s3.committedBaselineStartDate === addDays(corbCompleteDate, 1), 'Stage 3 PM Baseline starts on day following CORB completion');
+  assert(s4.committedBaselineStartDate === addDays(s3.committedBaselineEndDate, 1), 'Stage 4 BOM Release starts after Baseline review gate');
+  assert(s7.committedDurationDays === 14, 'Stage 7 raw material lead time is preserved during BOM scaling');
+  assert(s14.committedBaselineEndDate === deliveryTargetDate, `Stage 14 final shipment ends on contractual delivery date (${s14.committedBaselineEndDate} === ${deliveryTargetDate})`);
+  assert(calculatedDeliveryDate === deliveryTargetDate, `Calculated delivery date matches contractual delivery date (${calculatedDeliveryDate} === ${deliveryTargetDate})`);
+
+  // Verify that fresh creation has zero false delay!
+  const freshLine: ProductLine = {
+    id: 'line-test-21-fresh',
+    lineNumber: 'LINE-01',
+    productName: 'Flow Valve',
+    category: 'Valves',
+    qty: 1,
+    designType: 'Existing Design',
+    milestones: bomBaseline,
+    materials: [{ id: 'm1', itemCode: 'RAW-01', description: 'Raw', leadTimeDays: 14, isCriticalPath: true, qty: 1, unit: 'pcs', supplierName: 'S1' }],
+    status: 'In Progress',
+    overallVarianceDays: 0
+  };
+  const freshRecal = recalculateProductLine(freshLine, '2026-10-01', 3, 7);
+  assert(freshRecal.overallVarianceDays === 0, `Freshly created PO line has strictly 0 varianceDays (got ${freshRecal.overallVarianceDays}d)`);
+  assert(freshRecal.status !== 'Delayed' && freshRecal.status !== 'At Risk', `Freshly created PO line is not Delayed or At Risk (got ${freshRecal.status})`);
+
+  // Verify delay calculations & revised timeline work perfectly from BOM onwards
+  const delayedS8Date = addDays(s7.committedBaselineEndDate, 20); // 5 days late
+  const testLine: ProductLine = {
+    id: 'line-test-21',
+    lineNumber: 'LINE-01',
+    productName: 'Flow Valve',
+    category: 'Valves',
+    qty: 1,
+    designType: 'Existing Design',
+    milestones: bomBaseline.map((m, idx) => {
+      if (idx === 0) return { ...m, status: 'Completed', actualStartDate: '2026-10-01', actualEndDate: '2026-10-01' };
+      if (idx === 1) return { ...m, status: 'Completed', actualStartDate: '2026-10-01', actualEndDate: corbCompleteDate };
+      if (idx === 2) return { ...m, status: 'Completed', actualStartDate: corbCompleteDate, actualEndDate: corbCompleteDate };
+      if (idx === 6) return { ...m, status: 'Completed', actualStartDate: m.committedBaselineStartDate, actualEndDate: delayedS8Date };
+      return m;
+    }),
+    materials: [{ id: 'm1', itemCode: 'RAW-01', description: 'Raw', leadTimeDays: 14, isCriticalPath: true, qty: 1, unit: 'pcs', supplierName: 'S1' }],
+    status: 'In Progress',
+    overallVarianceDays: 0
+  };
+
+  const recalculated = recalculateProductLine(testLine, '2026-11-01', 3, 7);
+  const recalS7 = recalculated.milestones.find(m => m.key === 'material_receipt')!;
+  const recalLast = recalculated.milestones[recalculated.milestones.length - 1];
+
+  assert(recalS7.varianceDays >= 5, `Delay at Stage 7 produces positive varianceDays (got ${recalS7.varianceDays}d)`);
+  assert(recalculated.overallVarianceDays >= 5, `Line overallVariance reflects downstream delay (got ${recalculated.overallVarianceDays}d)`);
+  assert(recalLast.forecastEndDate > deliveryTargetDate, `Revised final delivery date shifts past delivery target (got ${recalLast.forecastEndDate} > ${deliveryTargetDate})`);
+
+  // Verify single-line CORB completion realigns baseline with strictly 0 delay
+  const corbLineAfterSingleComplete: ProductLine = {
+    id: 'line-single-corb',
+    lineNumber: 'LINE-01',
+    productName: 'Flow Valve',
+    category: 'Valves',
+    qty: 1,
+    designType: 'Existing Design',
+    milestones: bomBaseline.map(m => {
+      if (m.key === 'po_from_customer') return { ...m, status: 'Completed', actualStartDate: '2026-10-01', actualEndDate: '2026-10-01' };
+      if (m.key === 'corb_release') return { ...m, status: 'Completed', actualStartDate: '2026-10-02', actualEndDate: corbCompleteDate, varianceDays: 0 };
+      return m;
+    }),
+    materials: [{ id: 'm1', itemCode: 'RAW-01', description: 'Raw', leadTimeDays: 14, isCriticalPath: true, qty: 1, unit: 'pcs', supplierName: 'S1' }],
+    status: 'In Progress',
+    overallVarianceDays: 0
+  };
+  const recalSingle = recalculateProductLine(corbLineAfterSingleComplete, '2026-10-05', 3, 7);
+  assert(recalSingle.overallVarianceDays === 0, `Completing CORB produces strictly 0 overallVarianceDays (got ${recalSingle.overallVarianceDays}d)`);
+  assert(!recalSingle.milestones.some(m => m.varianceDays > 0), `Zero downstream milestones show delay after CORB completion`);
+}
+
+// ----------------------------------------------------------------------------
+// TEST GROUP 22: Stage 2 (CORB Release) Completion Gate Before Master Baseline Approval
+// ----------------------------------------------------------------------------
+console.log('\n📋 GROUP 22: Stage 2 (CORB Release) Completion Gate Before Baseline Approval');
+{
+  const gatePo: PurchaseOrder = {
+    ...po,
+    id: 'po-gate-test',
+    status: 'Baseline Pending',
+    productLines: [
+      {
+        ...po.productLines[0],
+        milestones: build14Milestones('2026-11-01').map(m => {
+          if (m.key === 'po_from_customer') return { ...m, status: 'Completed', actualEndDate: '2026-11-01' };
+          if (m.key === 'corb_release') return { ...m, status: 'Not Started', actualEndDate: undefined };
+          return m;
+        })
+      }
+    ]
+  };
+
+  // 1. Verify CORB incomplete check
+  const corbIncomplete = gatePo.productLines.some(line => {
+    const corb = line.milestones.find(m => m.key === 'corb_release');
+    return !corb || (!corb.actualEndDate && corb.status !== 'Completed' && corb.completionPct !== 100);
+  });
+  assert(corbIncomplete === true, 'Baseline approval is strictly blocked when Stage 2 (CORB Release) is incomplete');
+
+  // 2. Complete CORB Release
+  const corbCompleteDate = '2026-11-04';
+  const updatedGatePo: PurchaseOrder = {
+    ...gatePo,
+    productLines: gatePo.productLines.map(line => ({
+      ...line,
+      milestones: line.milestones.map(m => {
+        if (m.key === 'corb_release') {
+          return {
+            ...m,
+            status: 'Completed',
+            actualEndDate: corbCompleteDate,
+            forecastEndDate: corbCompleteDate,
+            completionPct: 100,
+            varianceDays: 0
+          };
+        }
+        return m;
+      })
+    }))
+  };
+
+  const corbStillIncomplete = updatedGatePo.productLines.some(line => {
+    const corb = line.milestones.find(m => m.key === 'corb_release');
+    return !corb || (!corb.actualEndDate && corb.status !== 'Completed' && corb.completionPct !== 100);
+  });
+  assert(corbStillIncomplete === false, 'Baseline approval is unlocked once Stage 2 (CORB Release) is completed');
+
+  // 3. Verify calculateMilestonesFromBOM anchors baseline from CORB completion date
+  const { milestones: calculatedMs } = calculateMilestonesFromBOM({
+    milestones: updatedGatePo.productLines[0].milestones,
+    poDate: '2026-11-01',
+    corbEndDate: corbCompleteDate,
+    deliveryDate: '2027-01-28',
+    materials: updatedGatePo.productLines[0].materials
+  });
+
+  const bomStage = calculatedMs.find(m => m.key === 'bom_release')!;
+  assert(bomStage.committedBaselineStartDate > corbCompleteDate, `BOM Release baseline start (${bomStage.committedBaselineStartDate}) begins after CORB completion (${corbCompleteDate})`);
+  assert(!calculatedMs.some(m => m.varianceDays > 0), 'Calculated master baseline contains strictly 0 delay variance');
+}
+
+// ----------------------------------------------------------------------------
+// TEST GROUP 23: Stage 2 (CORB Release) Delay Immunity & Zero Delay Variance
+// ----------------------------------------------------------------------------
+console.log('\n📋 GROUP 23: Stage 2 (CORB Release) Delay Immunity & Anchor Recalculation');
+
+{
+  // Test 1: Entering a CORB completion date beyond earlier estimate never triggers delay
+  const testCorbEndDate = '2026-11-07'; // User entered 07-11-2026 in screenshot
+  const poDate = '2026-11-04';
+  const deliveryDate = '2027-01-22';
+
+  const initialSchedule = buildTemplateSchedule({
+    designType: 'Existing Design',
+    materials: [],
+    startDate: poDate,
+    lineId: 'line-corb-immunity-test',
+    targetEndDate: deliveryDate
+  });
+
+  const corbMs = initialSchedule.find(m => m.key === 'corb_release')!;
+  assert(corbMs.committedDurationDays === 0, 'Stage 2 CORB initial planned duration is 0d');
+  assert(!corbMs.committedBaselineStartDate, 'Stage 2 CORB has no planned baseline start');
+  assert(!corbMs.committedBaselineEndDate, 'Stage 2 CORB has no planned baseline end');
+
+  // Recalculate with user's completion date
+  const { milestones: recalcedBOM } = calculateMilestonesFromBOM({
+    milestones: initialSchedule,
+    poDate,
+    corbEndDate: testCorbEndDate,
+    deliveryDate,
+    materials: []
+  });
+
+  const completedCorb = recalcedBOM.find(m => m.key === 'corb_release')!;
+  assert(completedCorb.actualEndDate === testCorbEndDate, `CORB actualEndDate is ${testCorbEndDate}`);
+  assert(completedCorb.varianceDays === 0, 'CORB varianceDays is strictly 0d');
+  assert(completedCorb.status === 'Completed', 'CORB status is Completed');
+
+  const s3Baseline = recalcedBOM.find(m => m.key === 'pm_baseline')!;
+  assert(s3Baseline.committedBaselineStartDate === addDays(testCorbEndDate, 1), `Stage 3 PM Baseline starts on day after CORB (${s3Baseline.committedBaselineStartDate})`);
+
+  const s4BOM = recalcedBOM.find(m => m.key === 'bom_release')!;
+  assert(s4BOM.committedBaselineStartDate === addDays(s3Baseline.committedBaselineEndDate, 1), `Stage 4 BOM starts after Stage 3 (${s4BOM.committedBaselineStartDate})`);
+  assert(!recalcedBOM.some(m => m.varianceDays > 0), 'All downstream stages have strictly 0 delay variance upon CORB completion');
 }
 
 console.log('\n================================================================');

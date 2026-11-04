@@ -17,8 +17,8 @@ export type ModuleType =
   | 'Dashboard' 
   | 'Administration & Governance'
   | '1. Customer Purchase Order (PO)'
-  | '2. Baseline Review & Planning'
-  | '3. CORB Release'
+  | '2. CORB Release'
+  | '3. Baseline Review & Planning'
   | '4. BOM Release'
   | '5. Work Order (WO) Release'
   | '6. Sub-Supplier PO'
@@ -43,8 +43,8 @@ interface SidebarProps {
 const ALL_ROLES: Role[] = [
   'Project Management',
   'Sales / AE (Customer PO)',
-  'Project Manager (PM Baseline)',
   'AE (CORB Release)',
+  'Project Manager (PM Baseline)',
   'DE (BOM Release)',
   'Planner (WO Release)',
   'SCM (Sub-Supplier PO)',
@@ -62,8 +62,8 @@ const ALL_ROLES: Role[] = [
 const ROLE_BADGE: Record<Role, string> = {
   'Project Management':           'bg-emerald-100 text-emerald-800 border-emerald-300',
   'Sales / AE (Customer PO)':     'bg-blue-100 text-blue-800 border-blue-300',
-  'Project Manager (PM Baseline)':'bg-cyan-100 text-cyan-800 border-cyan-300',
   'AE (CORB Release)':            'bg-teal-100 text-teal-800 border-teal-300',
+  'Project Manager (PM Baseline)':'bg-cyan-100 text-cyan-800 border-cyan-300',
   'DE (BOM Release)':             'bg-indigo-100 text-indigo-800 border-indigo-300',
   'Planner (WO Release)':         'bg-violet-100 text-violet-800 border-violet-300',
   'SCM (Sub-Supplier PO)':        'bg-amber-100 text-amber-800 border-amber-300',
@@ -80,8 +80,8 @@ const ROLE_BADGE: Record<Role, string> = {
 const ROLE_RESPONSIBLE_MODULE: Record<Role, ModuleType> = {
   'Project Management':           'Administration & Governance',
   'Sales / AE (Customer PO)':     '1. Customer Purchase Order (PO)',
-  'Project Manager (PM Baseline)':'2. Baseline Review & Planning',
-  'AE (CORB Release)':            '3. CORB Release',
+  'AE (CORB Release)':            '2. CORB Release',
+  'Project Manager (PM Baseline)':'3. Baseline Review & Planning',
   'DE (BOM Release)':             '4. BOM Release',
   'Planner (WO Release)':         '5. Work Order (WO) Release',
   'SCM (Sub-Supplier PO)':        '6. Sub-Supplier PO',
@@ -108,8 +108,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" />, step: '1' },
     { name: 'Administration & Governance', icon: <Settings className="w-4 h-4" />, step: 'ADM' },
     { name: '1. Customer Purchase Order (PO)', icon: <FilePlus2 className="w-4 h-4" />, step: '2' },
-    { name: '2. Baseline Review & Planning', icon: <FilePlus2 className="w-4 h-4" />, step: '3' },
-    { name: '3. CORB Release', icon: <FilePlus2 className="w-4 h-4" />, step: '4' },
+    { name: '2. CORB Release', icon: <FilePlus2 className="w-4 h-4" />, step: '3' },
+    { name: '3. Baseline Review & Planning', icon: <FilePlus2 className="w-4 h-4" />, step: '4' },
     { name: '4. BOM Release', icon: <FilePlus2 className="w-4 h-4" />, step: '5' },
     { name: '5. Work Order (WO) Release', icon: <Factory className="w-4 h-4" />, step: '6' },
     { name: '6. Sub-Supplier PO', icon: <PackageCheck className="w-4 h-4" />, step: '7' },

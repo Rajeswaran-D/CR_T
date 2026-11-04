@@ -73,22 +73,22 @@ const CIRCOR_STANDARD_STAGES: ManufacturingStageDef[] = [
     responsibleRole: 'Sales / AE (Customer PO)'
   },
   {
-    key: 'pm_baseline',
-    order: 2,
-    name: '2. Baseline Review & Planning',
-    category: 'Planning',
-    primaryCause: 'Delayed schedule alignment across production and procurement slots',
-    improvementTip: 'Apply standard schedule templates with pre-set buffer days',
-    responsibleRole: 'Project Manager (PM Baseline)'
-  },
-  {
     key: 'corb_release',
-    order: 3,
-    name: '3. CORB Release',
+    order: 2,
+    name: '2. CORB Release',
     category: 'Engineering',
     primaryCause: 'Multi-party design sign-off bottlenecks and customer review holds',
     improvementTip: 'Set a mandatory 3-day approval window for standard design valve configurations',
     responsibleRole: 'AE (CORB Release)'
+  },
+  {
+    key: 'pm_baseline',
+    order: 3,
+    name: '3. Baseline Review & Planning',
+    category: 'Planning',
+    primaryCause: 'Delayed schedule alignment across production and procurement slots',
+    improvementTip: 'Apply standard schedule templates with pre-set buffer days',
+    responsibleRole: 'Project Manager (PM Baseline)'
   },
   {
     key: 'bom_release',

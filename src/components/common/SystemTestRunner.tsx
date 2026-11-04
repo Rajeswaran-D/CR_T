@@ -45,7 +45,7 @@ const makeMilestone = (id: string, key: string, name: string, stageOrder: number
 });
 
 const THE_14_KEYS = [
-  'po_from_customer', 'baseline_review', 'corb_release', 'bom_release',
+  'po_from_customer', 'corb_release', 'baseline_review', 'bom_release',
   'wo_release', 'sub_supplier_po', 'material_receipt', 'machining',
   'assembly', 'fg', 'customer_inspection', 'painting', 'trn', 'shipment'
 ] as const;
@@ -216,8 +216,8 @@ export const SystemTestRunner: React.FC<SystemTestRunnerProps> = ({ isOpen, onCl
         ...baseLine(),
         milestones: buildChain({
           po_from_customer: { status: 'Completed', actualEndDate: '2026-08-01', completionPct: 100 },
-          baseline_review:  { status: 'Completed', actualEndDate: '2026-08-02', completionPct: 100 },
-          corb_release:     { status: 'Completed', actualEndDate: '2026-08-03', completionPct: 100 },
+          corb_release:     { status: 'Completed', actualEndDate: '2026-08-02', completionPct: 100 },
+          baseline_review:  { status: 'Completed', actualEndDate: '2026-08-03', completionPct: 100 },
           bom_release:      { status: 'Completed', actualEndDate: '2026-08-04', completionPct: 100 },
           wo_release:       { status: 'Completed', actualEndDate: '2026-08-05', completionPct: 100 },
           sub_supplier_po:  { status: 'Completed', actualEndDate: '2026-08-06', completionPct: 100 },
@@ -265,8 +265,8 @@ export const SystemTestRunner: React.FC<SystemTestRunnerProps> = ({ isOpen, onCl
       const t16s = performance.now();
       const chainMs8 = buildChain({
         po_from_customer: { status: 'Completed', actualEndDate: '2026-08-01', completionPct: 100 },
-        baseline_review:  { status: 'Completed', actualEndDate: '2026-08-02', completionPct: 100 },
-        corb_release:     { status: 'Completed', actualEndDate: '2026-08-03', completionPct: 100 },
+        corb_release:     { status: 'Completed', actualEndDate: '2026-08-02', completionPct: 100 },
+        baseline_review:  { status: 'Completed', actualEndDate: '2026-08-03', completionPct: 100 },
         bom_release:      { status: 'Completed', actualEndDate: '2026-08-04', completionPct: 100 },
         wo_release:       { status: 'Completed', actualEndDate: '2026-08-05', completionPct: 100 },
         sub_supplier_po:  { status: 'Completed', actualEndDate: '2026-08-06', completionPct: 100 },

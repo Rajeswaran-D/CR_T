@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { Calendar, CheckCircle2, Lock, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Calendar, CheckCircle2, Lock, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BaselineRevisionModal } from '../modals/BaselineRevisionModal';
 import { CloseOrderModal } from '../modals/CloseOrderModal';
 import type { PurchaseOrder } from '../../types';
 import { getPOManufacturingStatus } from '../../utils/statusUtils';
 
-export const BaselinePlanningModule: React.FC = () => {
+export interface BaselinePlanningModuleProps {
+  onNavigateModule?: (module: any) => void;
+}
+
+export const BaselinePlanningModule: React.FC<BaselinePlanningModuleProps> = ({ onNavigateModule }) => {
   const { purchaseOrders, activeRole } = useApp();
   const [reviewPO, setReviewPO] = useState<PurchaseOrder | null>(null);
   const [closingPO, setClosingPO] = useState<PurchaseOrder | null>(null);
@@ -157,7 +161,13 @@ export const BaselinePlanningModule: React.FC = () => {
           ) : (
             activeOrders.map(po => {
               const firstLine = po.productLines[0];
-              const firstMilestone = firstLine?.milestones[0];
+              const corbMilestone = firstLine?.milestones.find(m => m.key === 'corb_release');
+              const allCorbCompleted = po.productLines.length > 0 && po.productLines.every(l => {
+                const corb = l.milestones.find(m => m.key === 'corb_release');
+                return Boolean(corb?.actualEndDate) && corb?.status === 'Completed';
+              });
+              const corbCompleted = allCorbCompleted;
+              const corbEnd = corbMilestone?.actualEndDate || 'Pending CORB';
               const lastMilestone = firstLine?.milestones[firstLine.milestones.length - 1];
               const isPending = po.status === 'Baseline Pending' && !po.isClosed;
               const statusSummary = getPOManufacturingStatus(po);
@@ -171,16 +181,24 @@ export const BaselinePlanningModule: React.FC = () => {
                       <span className="font-semibold text-slate-900">{po.customerName}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                         isPending 
-                          ? 'bg-amber-100 text-amber-900 border-amber-300' 
+                          ? (!allCorbCompleted ? 'bg-amber-50 text-amber-900 border-amber-300' : 'bg-cyan-50 text-cyan-900 border-cyan-300')
                           : isDelayed
                           ? 'bg-rose-100 text-rose-800 border-rose-300'
                           : 'bg-emerald-100 text-emerald-900 border-emerald-300'
                       }`}>
-                        {isPending ? 'Baseline Pending' : isDelayed ? `Delayed (+${statusSummary.delayDays}d)` : po.status}
+                        {isPending 
+                          ? (!allCorbCompleted ? 'Awaiting CORB Release' : 'Ready for Baseline Review')
+                          : isDelayed ? `Delayed (+${statusSummary.delayDays}d)` : po.status}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-600">
-                      <span className="font-bold text-slate-700">Planned Start: <strong className="font-mono text-slate-900">{firstMilestone?.committedBaselineStartDate || po.poDate}</strong></span>
+                      <span className="font-bold text-slate-700">PO Intake: <strong className="font-mono text-slate-900">{po.poDate}</strong></span>
+                      <span className="font-bold text-slate-700">
+                        BOM Release Start: <strong className="font-mono text-cyan-800">{corbEnd}</strong>
+                        <span className={`ml-1 text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded border ${corbCompleted ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
+                          {corbCompleted ? 'CORB Completed' : 'Awaiting Stage 2 CORB'}
+                        </span>
+                      </span>
                       <span className="font-bold text-slate-700">Planned End: <strong className="font-mono text-slate-900">{lastMilestone?.committedBaselineEndDate || po.committedDeliveryDate}</strong></span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" /> 
@@ -198,8 +216,29 @@ export const BaselinePlanningModule: React.FC = () => {
                   <div className="flex items-center gap-3">
                     {isPending ? (
                       isPM ? (
-                        <button onClick={() => setReviewPO(po)} className="px-4 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs">
-                          <ShieldCheck className="w-4 h-4" /> Review Full Baseline
+                        allCorbCompleted ? (
+                          <button onClick={() => setReviewPO(po)} className="px-4 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                            <ShieldCheck className="w-4 h-4" /> Review Full Baseline
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              onNavigateModule?.('2. CORB Release');
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-300 text-teal-800 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                            title="Stage 2 (CORB Release) must be completed across all lines before baseline review. Click to go to Stage 2."
+                          >
+                            <Clock className="w-3.5 h-3.5 text-teal-600" /> Go to Stage 2: CORB Release →
+                          </button>
+                        )
+                      ) : !allCorbCompleted ? (
+                        <button
+                          onClick={() => {
+                            onNavigateModule?.('2. CORB Release');
+                          }}
+                          className="px-3 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-300 text-teal-800 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-teal-600" /> Go to Stage 2: CORB Release →
                         </button>
                       ) : (
                         <span className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">PM Review Required</span>
@@ -289,7 +328,7 @@ export const BaselinePlanningModule: React.FC = () => {
       )}
 
       {reviewPO && (
-        <BaselineRevisionModal isOpen onClose={() => setReviewPO(null)} po={reviewPO} />
+        <BaselineRevisionModal isOpen onClose={() => setReviewPO(null)} po={reviewPO} onNavigateModule={onNavigateModule} />
       )}
 
       {/* Close Order Modal */}

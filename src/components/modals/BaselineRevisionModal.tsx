@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { X, AlertTriangle, ShieldCheck, CheckCircle2, RefreshCw, Sparkles, Package } from 'lucide-react';
+import { X, AlertTriangle, ShieldCheck, CheckCircle2, RefreshCw, Sparkles, Package, Clock } from 'lucide-react';
 import type { PurchaseOrder } from '../../types';
-import { addDays, todayLocal } from '../../services/calculationEngine';
+import { addDays, todayLocal, calculateMilestonesFromBOM } from '../../services/calculationEngine';
 
 type FlowMilestone = {
   key: string;
@@ -14,12 +14,14 @@ interface BaselineRevisionModalProps {
   isOpen: boolean;
   onClose: () => void;
   po: PurchaseOrder;
+  onNavigateModule?: (module: any) => void;
 }
 
 export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
   isOpen,
   onClose,
-  po
+  po,
+  onNavigateModule
 }) => {
   const { addBaselineRevision, activeRole } = useApp();
 
@@ -33,22 +35,45 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
   const [customFlows, setCustomFlows] = useState<Record<string, FlowMilestone[]>>({});
   const [error, setError] = useState<string | null>(null);
 
+  const line1 = po.productLines[0];
+  const corbMs = line1?.milestones.find(m => m.key === 'corb_release');
+  const corbEndDate = corbMs?.actualEndDate || corbMs?.committedBaselineEndDate || po.poDate || todayLocal();
+  const corbIsCompleted = Boolean(corbMs?.actualEndDate) && corbMs?.status === 'Completed';
+  const allLinesCorbCompleted = po.productLines.length > 0 && po.productLines.every(l => {
+    const corb = l.milestones.find(m => m.key === 'corb_release');
+    return Boolean(corb?.actualEndDate) && corb?.status === 'Completed';
+  });
+
   useEffect(() => {
     if (!isOpen) return;
-    const initialStart = po.productLines[0]?.milestones[0]?.committedBaselineStartDate || po.poDate || todayLocal();
+    const initialStart = corbEndDate;
     setReason('');
     setFlowMode('recommended');
     setBaselineStartDate(initialStart);
     setError(null);
 
+    // Calculate baseline schedule starting from BOM Release as per last date of CORB and delivery date
+    const { milestones: calculatedMs } = calculateMilestonesFromBOM({
+      milestones: line1?.milestones || [],
+      poDate: po.poDate || todayLocal(),
+      corbEndDate,
+      deliveryDate: po.committedDeliveryDate,
+      materials: line1?.materials
+    });
+
     const initialMap: { [key: string]: number } = {};
     const masterMap: { [key: string]: number } = {};
 
+    calculatedMs.forEach(ms => {
+      if (ms.key !== 'po_from_customer' && ms.key !== 'corb_release') {
+        masterMap[ms.key] = ms.committedDurationDays;
+      }
+    });
+
     po.productLines.forEach(line => {
-      line.milestones.forEach(ms => {
-        initialMap[`${line.id}_${ms.key}`] = ms.committedDurationDays;
-        if (masterMap[ms.key] === undefined) {
-          masterMap[ms.key] = ms.committedDurationDays;
+      calculatedMs.forEach(ms => {
+        if (ms.key !== 'po_from_customer' && ms.key !== 'corb_release') {
+          initialMap[`${line.id}_${ms.key}`] = ms.committedDurationDays;
         }
       });
     });
@@ -58,20 +83,22 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
 
     const initialFlows: Record<string, FlowMilestone[]> = {};
     po.productLines.forEach(line => {
-      initialFlows[line.id] = line.milestones.map(ms => ({
-        key: ms.key,
-        name: ms.name,
-        durationDays: ms.committedDurationDays
-      }));
+      initialFlows[line.id] = calculatedMs
+        .filter(ms => ms.key !== 'po_from_customer' && ms.key !== 'corb_release')
+        .map(ms => ({
+          key: ms.key,
+          name: ms.name,
+          durationDays: ms.committedDurationDays
+        }));
     });
     setCustomFlows(initialFlows);
-  }, [isOpen, po.id]);
+  }, [isOpen, po.id, corbEndDate]);
 
   if (!isOpen) return null;
 
   const isInitialApproval = po.status === 'Baseline Pending';
   const flowAlreadyStarted = !isInitialApproval && po.productLines.some(line =>
-    line.milestones.some(ms => ms.stageOrder > 2 && Boolean(ms.actualStartDate || ms.actualEndDate))
+    line.milestones.some(ms => ms.stageOrder > 3 && Boolean(ms.actualStartDate || ms.actualEndDate))
   );
 
   const handleMasterDurationChange = (milestoneKey: string, val: number) => {
@@ -105,6 +132,11 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (isInitialApproval && !allLinesCorbCompleted) {
+      setError('Cannot approve master baseline: Stage 2 (CORB Release) must be completed across all product lines first.');
+      return;
+    }
 
     if (flowAlreadyStarted) {
       setError('Cannot revise baseline after actual work has started. Update milestones through the production modules.');
@@ -164,34 +196,75 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
   // Master representative milestone list (taken from line 1 or longest line)
   const masterMilestones = po.productLines[0]?.milestones || [];
 
-  // Calculate master schedule
-  let masterRunningDate = baselineStartDate || po.poDate || today;
-  const masterSchedule = masterMilestones.map((ms, index) => {
-    const duration = masterDurations[ms.key] || ms.committedDurationDays;
-    const startDate = masterRunningDate;
-    const endDate = addDays(startDate, Math.max(1, duration) - 1);
-    masterRunningDate = addDays(endDate, 1);
-    return { ...ms, index, durationDays: duration, startDate, endDate };
+  // Calculate master schedule from BOM release as per last date (complete) of CORB and delivery date
+  const { milestones: masterScheduleRaw, calculatedDeliveryDate: masterCalculatedDeliveryDate } = calculateMilestonesFromBOM({
+    milestones: line1?.milestones || [],
+    poDate: po.poDate || today,
+    corbEndDate: baselineStartDate || corbEndDate,
+    deliveryDate: po.committedDeliveryDate,
+    materials: line1?.materials,
+    customDurations: masterDurations
   });
-  const masterCalculatedDeliveryDate = masterSchedule[masterSchedule.length - 1]?.endDate || po.committedDeliveryDate;
 
-  // Extract all historical delay records across all products in the PO for reference
-  const netPoDelay = Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0));
-  const allPoDelays: { stageOrder: number; stageName: string; varianceDays: number; delayReason?: string }[] = [];
-  po.productLines.forEach(line => {
-    line.milestones.forEach(m => {
-      if ((typeof m.varianceDays === 'number' && m.varianceDays > 0) || (m.delayReason && !m.delayReason.startsWith('Cascaded'))) {
-        if (!allPoDelays.some(existing => existing.stageOrder === m.stageOrder && existing.delayReason === m.delayReason)) {
-          allPoDelays.push({
-            stageOrder: m.stageOrder,
-            stageName: m.name,
-            varianceDays: m.varianceDays || 0,
-            delayReason: m.delayReason
-          });
-        }
+  const masterSchedule = masterScheduleRaw
+    .filter(ms => ms.key !== 'po_from_customer' && ms.key !== 'corb_release')
+    .map((ms, index) => ({
+      ...ms,
+      index,
+      durationDays: masterDurations[ms.key] !== undefined ? masterDurations[ms.key] : ms.committedDurationDays,
+      startDate: ms.committedBaselineStartDate,
+      endDate: ms.committedBaselineEndDate
+    }));
+
+  const handleAutoFitToDelivery = () => {
+    const { milestones: fitted } = calculateMilestonesFromBOM({
+      milestones: line1?.milestones || [],
+      poDate: po.poDate || today,
+      corbEndDate: baselineStartDate || corbEndDate,
+      deliveryDate: po.committedDeliveryDate,
+      materials: line1?.materials
+    });
+
+    const nextMaster: Record<string, number> = {};
+    fitted.forEach(ms => {
+      if (ms.key !== 'po_from_customer' && ms.key !== 'corb_release') {
+        nextMaster[ms.key] = ms.committedDurationDays;
       }
     });
-  });
+    setMasterDurations(nextMaster);
+
+    setDurationChanges(prev => {
+      const next = { ...prev };
+      po.productLines.forEach(line => {
+        fitted.forEach(ms => {
+          if (ms.key !== 'po_from_customer' && ms.key !== 'corb_release') {
+            next[`${line.id}_${ms.key}`] = ms.committedDurationDays;
+          }
+        });
+      });
+      return next;
+    });
+  };
+
+  // Extract all historical delay records across all products in the PO for reference
+  const netPoDelay = isInitialApproval ? 0 : Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0));
+  const allPoDelays: { stageOrder: number; stageName: string; varianceDays: number; delayReason?: string }[] = [];
+  if (!isInitialApproval) {
+    po.productLines.forEach(line => {
+      line.milestones.forEach(m => {
+        if ((typeof m.varianceDays === 'number' && m.varianceDays > 0) || (m.delayReason && !m.delayReason.startsWith('Cascaded'))) {
+          if (!allPoDelays.some(existing => existing.stageOrder === m.stageOrder && existing.delayReason === m.delayReason)) {
+            allPoDelays.push({
+              stageOrder: m.stageOrder,
+              stageName: m.name,
+              varianceDays: m.varianceDays || 0,
+              delayReason: m.delayReason
+            });
+          }
+        }
+      });
+    });
+  }
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -227,6 +300,29 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
             </div>
           )}
 
+          {isInitialApproval && !allLinesCorbCompleted && (
+            <div className="p-3.5 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-700 shrink-0" />
+                <span>
+                  <strong>Stage 2 (CORB Release) Incomplete:</strong> The master baseline cannot be locked until Stage 2 (CORB Release) is completed across all product lines. Once completed, the CORB completion date will anchor and calculate the subsequent baseline.
+                </span>
+              </div>
+              {onNavigateModule && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onNavigateModule('2. CORB Release');
+                  }}
+                  className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
+                >
+                  Go to Stage 2 (CORB Release) →
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Unified Scope Info Banner */}
           <div className="bg-cyan-50/70 border border-cyan-200 p-3.5 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -246,31 +342,49 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block font-bold text-slate-700 text-[11px]">
-                  Baseline Planned Start Date
+                  CORB Completion Date (BOM Anchor)
                 </label>
-                <span className="text-[9px] font-mono text-cyan-800 font-semibold bg-cyan-50 px-1.5 py-0.2 rounded border border-cyan-200">Past 1 Wk &amp; Future</span>
+                <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${
+                  corbIsCompleted ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}>
+                  {corbIsCompleted ? 'CORB Completed' : 'Pending CORB Entry'}
+                </span>
               </div>
               <input
                 type="date"
-                min={addDays(today, -7)}
+                min={addDays(today, -30)}
                 value={baselineStartDate}
                 disabled={flowAlreadyStarted}
                 onChange={(e) => setBaselineStartDate(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-cyan-600 font-bold"
               />
               <p className="text-[9px] text-slate-500 mt-1 font-mono">
-                Enabled: Past 1 week ({addDays(today, -7)}), today, &amp; future dates
+                Baseline manufacturing schedule starts after this completion date
               </p>
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
-                Calculated Final Delivery
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700 text-[11px]">
+                  Calculated Delivery
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAutoFitToDelivery}
+                  disabled={flowAlreadyStarted}
+                  className="text-[9px] font-mono text-cyan-800 hover:text-cyan-950 font-bold bg-cyan-100 hover:bg-cyan-200 px-1.5 py-0.5 rounded cursor-pointer border border-cyan-300"
+                  title="Recalculate durations from BOM Release to fit contractual delivery date"
+                >
+                  Auto-Fit
+                </button>
+              </div>
               <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-cyan-900 font-extrabold flex items-center justify-between">
                 <span>{masterCalculatedDeliveryDate}</span>
                 <span className="text-[10px] text-slate-500 font-normal">PO: {po.committedDeliveryDate}</span>
               </div>
+              <p className="text-[9px] text-slate-500 mt-1 font-mono">
+                {masterCalculatedDeliveryDate === po.committedDeliveryDate ? '✅ Aligned with contract delivery' : `Target: ${po.committedDeliveryDate}`}
+              </p>
             </div>
 
             <div>
@@ -324,13 +438,23 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
               <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-cyan-600" /> Master 14-Stage Duration Plan (Applies to All {po.productLines.length} Products)
+                    <Sparkles className="w-4 h-4 text-cyan-600" /> Master Baseline Schedule (Planned from BOM &rarr; Delivery)
                   </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Edit stage durations below. Dates will automatically chain and synchronize across all products.</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Anchored on CORB completion date ({corbEndDate || 'Pending'}). Sales and CORB stages are excluded from baseline planning.</p>
                 </div>
-                <span className="text-xs font-mono font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-1 rounded-lg">
-                  Total: {masterSchedule.reduce((acc, m) => acc + m.durationDays, 0)} Days
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoFitToDelivery}
+                    disabled={flowAlreadyStarted}
+                    className="text-xs font-mono font-bold text-cyan-800 bg-white hover:bg-cyan-50 border border-cyan-300 px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-2xs"
+                  >
+                    Auto-Fit to {po.committedDeliveryDate}
+                  </button>
+                  <span className="text-xs font-mono font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-1 rounded-lg">
+                    Total: {masterSchedule.reduce((acc, m) => acc + m.durationDays, 0)} Days
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -345,25 +469,26 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {masterSchedule.map((ms, idx) => {
+                    {masterSchedule.map((ms) => {
                       const originalMs = masterMilestones.find(item => item.key === ms.key);
-                      const currentDur = masterDurations[ms.key] || ms.committedDurationDays;
-                      const diff = originalMs ? currentDur - originalMs.committedDurationDays : 0;
+                      const currentDur = masterDurations[ms.key] !== undefined ? masterDurations[ms.key] : ms.committedDurationDays;
+                      const initialDur = isInitialApproval ? ms.committedDurationDays : (originalMs?.committedDurationDays ?? ms.committedDurationDays);
+                      const diff = currentDur - initialDur;
 
                       return (
                         <tr key={ms.key} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-400">
-                            {idx + 1}
+                            {ms.stageOrder}
                           </td>
                           <td className="py-2.5 px-4 font-semibold text-slate-800">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span>{ms.name}</span>
-                              {originalMs && typeof originalMs.varianceDays === 'number' && originalMs.varianceDays > 0 && (
+                              {!isInitialApproval && originalMs && typeof originalMs.varianceDays === 'number' && originalMs.varianceDays > 0 && (
                                 <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                   +{originalMs.varianceDays}d Delay
                                 </span>
                               )}
-                              {originalMs && typeof originalMs.varianceDays === 'number' && originalMs.varianceDays < 0 && (
+                              {!isInitialApproval && originalMs && typeof originalMs.varianceDays === 'number' && originalMs.varianceDays < 0 && (
                                 <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   {originalMs.varianceDays}d Recovered
                                 </span>
@@ -381,7 +506,7 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                                 onChange={(e) => handleMasterDurationChange(ms.key, parseInt(e.target.value) || 1)}
                                 className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-center text-xs font-mono text-cyan-900 font-extrabold focus:bg-white focus:outline-none focus:border-cyan-600"
                               />
-                              {diff !== 0 && (
+                              {!isInitialApproval && diff !== 0 && (
                                 <span className={`text-[10px] font-mono font-bold ${diff > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                   {diff > 0 ? `+${diff}d` : `${diff}d`}
                                 </span>
@@ -416,12 +541,14 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {po.productLines.map(line => {
-                  let lineRunningDate = baselineStartDate || po.poDate || today;
-                  line.milestones.forEach(ms => {
-                    const dur = masterDurations[ms.key] !== undefined ? masterDurations[ms.key] : ms.committedDurationDays;
-                    lineRunningDate = addDays(lineRunningDate, Math.max(1, dur));
+                  const { calculatedDeliveryDate: lineDelivery } = calculateMilestonesFromBOM({
+                    milestones: line.milestones,
+                    poDate: po.poDate || today,
+                    corbEndDate: baselineStartDate || corbEndDate,
+                    deliveryDate: po.committedDeliveryDate,
+                    materials: line.materials,
+                    customDurations: masterDurations
                   });
-                  const lineDelivery = lineRunningDate || masterCalculatedDeliveryDate;
 
                   return (
                     <div key={line.id} className="bg-white p-3 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
@@ -466,10 +593,19 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
             {!flowAlreadyStarted && (
               <button
                 type="submit"
-                className="px-5 py-2 bg-cyan-800 hover:bg-cyan-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                disabled={isInitialApproval && !allLinesCorbCompleted}
+                className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors ${
+                  (isInitialApproval && !allLinesCorbCompleted)
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70'
+                    : 'bg-cyan-800 hover:bg-cyan-900 text-white cursor-pointer'
+                }`}
               >
                 {isInitialApproval ? (
-                  <><CheckCircle2 className="w-4 h-4 text-cyan-200" /> Lock Master Baseline & Release Order</>
+                  !allLinesCorbCompleted ? (
+                    <><Clock className="w-4 h-4 text-slate-400" /> Awaiting Stage 2 (CORB Release) Completion</>
+                  ) : (
+                    <><CheckCircle2 className="w-4 h-4 text-cyan-200" /> Lock Master Baseline & Release Order</>
+                  )
                 ) : (
                   <><RefreshCw className="w-4 h-4 text-cyan-200" /> Save Master Re-Baseline Rev {nextRevNum}</>
                 )}

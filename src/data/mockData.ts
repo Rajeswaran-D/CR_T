@@ -7,8 +7,8 @@ export const INITIAL_TEMPLATES: CategoryTemplate[] = [
     designType: 'Existing Design',
     milestoneDurations: [
       { milestoneKey: 'po_from_customer', milestoneName: '1. Customer Purchase Order (PO)', durationDays: 1 },
-      { milestoneKey: 'pm_baseline', milestoneName: '2. Baseline Review & Planning', durationDays: 3 },
-      { milestoneKey: 'corb_release', milestoneName: '3. CORB Release', durationDays: 2 },
+      { milestoneKey: 'corb_release', milestoneName: '2. CORB Release', durationDays: 2 },
+      { milestoneKey: 'pm_baseline', milestoneName: '3. Baseline Review & Planning', durationDays: 3 },
       { milestoneKey: 'bom_release', milestoneName: '4. BOM Release', durationDays: 3 },
       { milestoneKey: 'wo_release', milestoneName: '5. Work Order Release', durationDays: 2 },
       { milestoneKey: 'sub_supplier_po', milestoneName: '6. Sub-Supplier PO', durationDays: 3 },
@@ -28,8 +28,8 @@ export const INITIAL_TEMPLATES: CategoryTemplate[] = [
     designType: 'New Design',
     milestoneDurations: [
       { milestoneKey: 'po_from_customer', milestoneName: '1. Customer Purchase Order (PO)', durationDays: 1 },
-      { milestoneKey: 'pm_baseline', milestoneName: '2. Baseline Review & Planning', durationDays: 5 },
-      { milestoneKey: 'corb_release', milestoneName: '3. CORB Release', durationDays: 4 },
+      { milestoneKey: 'corb_release', milestoneName: '2. CORB Release', durationDays: 4 },
+      { milestoneKey: 'pm_baseline', milestoneName: '3. Baseline Review & Planning', durationDays: 5 },
       { milestoneKey: 'bom_release', milestoneName: '4. BOM Release', durationDays: 7 },
       { milestoneKey: 'wo_release', milestoneName: '5. Work Order Release', durationDays: 3 },
       { milestoneKey: 'sub_supplier_po', milestoneName: '6. Sub-Supplier PO', durationDays: 5 },

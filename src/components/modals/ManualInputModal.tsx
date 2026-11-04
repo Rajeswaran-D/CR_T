@@ -232,6 +232,13 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
     revisedTarget = targetEnd || baselineEnd || '';
   }
 
+  if (currentMilestone.key === 'corb_release') {
+    newDelayFormed = 0;
+    totalDelay = 0;
+    inheritedDelayDays = 0;
+    resolvedDelayDays = 0;
+  }
+
   const isBackdated = eventDate < todayStr;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -253,7 +260,7 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
       return;
     }
 
-    if (eventType === 'complete' && currentMsStart && eventDate < currentMsStart) {
+    if (currentMilestone.key !== 'corb_release' && eventType === 'complete' && currentMsStart && eventDate < currentMsStart) {
       setErrorMessage(`Completion date cannot be earlier than milestone start date (${currentMsStart}).`);
       return;
     }
@@ -368,20 +375,29 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
               </span>
             </div>
             <div className="space-y-1.5 pt-1.5 border-t border-slate-200/60 font-mono text-[11px]">
-              <div className="flex items-center justify-between text-slate-600">
-                <span>Planned Baseline: <strong className="text-slate-800">{baselineStart || 'N/A'} &rarr; {baselineEnd || 'N/A'}</strong></span>
-                <span className="text-[10px] text-slate-500 font-semibold">{baselineDuration} days planned</span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-slate-200/40">
-                <span className={precedingStartDelay > 0 ? "text-amber-800" : "text-emerald-700"}>
-                  Revised Target: <strong className={precedingStartDelay > 0 ? "text-amber-950" : "text-emerald-900"}>{targetRevisedStart || baselineStart || 'N/A'} &rarr; {targetRevisedEnd || baselineEnd || 'N/A'}</strong>
-                </span>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                  precedingStartDelay > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                }`}>
-                  {precedingStartDelay > 0 ? `+${precedingStartDelay}d shift` : 'On original baseline'}
-                </span>
-              </div>
+              {currentMilestone.key === 'corb_release' ? (
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Schedule Mode: <strong className="text-cyan-800">Event-Driven (No Planned Baseline Dates)</strong></span>
+                  <span className="text-[10px] text-cyan-800 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded font-bold">Single Completion Input</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Planned Baseline: <strong className="text-slate-800">{baselineStart || 'N/A'} &rarr; {baselineEnd || 'N/A'}</strong></span>
+                    <span className="text-[10px] text-slate-500 font-semibold">{baselineDuration} days planned</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/40">
+                    <span className={precedingStartDelay > 0 ? "text-amber-800" : "text-emerald-700"}>
+                      Revised Target: <strong className={precedingStartDelay > 0 ? "text-amber-950" : "text-emerald-900"}>{targetRevisedStart || baselineStart || 'N/A'} &rarr; {targetRevisedEnd || baselineEnd || 'N/A'}</strong>
+                    </span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                      precedingStartDelay > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    }`}>
+                      {precedingStartDelay > 0 ? `+${precedingStartDelay}d shift` : 'On original baseline'}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -448,11 +464,19 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
             </div>
           )}
 
+          {currentMilestone.key === 'corb_release' && (
+            <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-950 font-medium">
+              <strong>CORB Release:</strong> Enter only the completion date (end date). Downstream baseline planning for BOM Release (Stage 4) through Final Delivery (Stage 14) will be scheduled directly from this completion date without delay penalties.
+            </div>
+          )}
+
           {/* Event Date (Primary Input) */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-slate-700 font-semibold">
-                {isMaterialStage 
+                {currentMilestone.key === 'corb_release'
+                  ? 'CORB End Date - Completed'
+                  : isMaterialStage 
                   ? (eventType === 'start' ? 'Stage 7 Start Date (Order Placed)' : 'Actual Material Received Date (GRN Date)')
                   : eventType === 'start' 
                   ? (milestone.actualStartDate ? 'Re-enter Start Date' : 'Actual Start Date') 

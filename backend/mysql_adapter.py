@@ -19,6 +19,46 @@ logger = logging.getLogger("cft.mysql")
 
 DEFAULT_ORG_ID = "circor-flow-technologies"
 
+CANONICAL_STAGE_ORDER = {
+    "po_from_customer": 1,
+    "corb_release": 2,
+    "pm_baseline": 3,
+    "baseline_review": 3,
+    "bom_release": 4,
+    "wo_release": 5,
+    "sub_supplier_po": 6,
+    "material_receipt": 7,
+    "raw_material": 7,
+    "machining": 8,
+    "assembly": 9,
+    "fg": 10,
+    "qc_pass": 10,
+    "customer_inspection": 11,
+    "painting": 12,
+    "trn": 13,
+    "shipment": 14,
+}
+
+CANONICAL_STAGE_NAMES = {
+    "po_from_customer": "1. Customer Purchase Order (PO)",
+    "corb_release": "2. CORB Release",
+    "pm_baseline": "3. Baseline Review & Planning",
+    "baseline_review": "3. Baseline Review & Planning",
+    "bom_release": "4. BOM Release",
+    "wo_release": "5. Work Order Release",
+    "sub_supplier_po": "6. Sub-Supplier PO",
+    "material_receipt": "7. Material Receipt (GRN)",
+    "raw_material": "7. Material Receipt (GRN)",
+    "machining": "8. Machining",
+    "assembly": "9. Assembly",
+    "fg": "10. FG",
+    "qc_pass": "10. FG",
+    "customer_inspection": "11. Customer Inspection",
+    "painting": "12. Painting",
+    "trn": "13. TRN",
+    "shipment": "14. Final Shipment & Dispatch",
+}
+
 
 # ---------------------------------------------------------------------------
 # ID helpers
@@ -298,8 +338,8 @@ def save_orders_to_db(conn: pymysql.connections.Connection, org_id: str, orders:
                         delay_owner=VALUES(delay_owner),delay_reason=VALUES(delay_reason),
                         doc_ref=VALUES(doc_ref),backdate_reason=VALUES(backdate_reason),
                         accepted_by=VALUES(accepted_by),assembly_sub_tabs=VALUES(assembly_sub_tabs)""",
-                        (ms_id, org_id, line_id, ms["key"], ms.get("name", ms["key"]),
-                         ms.get("stageOrder",1), ms.get("defaultDurationDays",1),
+                        (ms_id, org_id, line_id, ms["key"], CANONICAL_STAGE_NAMES.get(ms["key"], ms.get("name", ms["key"])),
+                         CANONICAL_STAGE_ORDER.get(ms["key"], ms.get("stageOrder", 1)), ms.get("defaultDurationDays",1),
                          b_start, b_end, ms.get("committedDurationDays",1),
                          a_start, a_end, f_start, f_end, ms.get("varianceDays",0),
                          ms.get("status","Not Started"), ms.get("completionPct",0),
@@ -455,8 +495,8 @@ def load_orders_from_db(conn: pymysql.connections.Connection, org_id: str) -> li
                 ms_obj: dict = {
                     "id": m["id"],
                     "key": m["milestone_key"],
-                    "name": m["milestone_name"],
-                    "stageOrder": int(m.get("stage_order") or 1),
+                    "name": CANONICAL_STAGE_NAMES.get(m["milestone_key"], m["milestone_name"]),
+                    "stageOrder": CANONICAL_STAGE_ORDER.get(m["milestone_key"], int(m.get("stage_order") or 1)),
                     "defaultDurationDays": int(m.get("default_duration_days") or 1),
                     "committedBaselineStartDate": format_db_date(m.get("committed_baseline_start_date")),
                     "committedBaselineEndDate": format_db_date(m.get("committed_baseline_end_date")),
@@ -510,6 +550,8 @@ def load_orders_from_db(conn: pymysql.connections.Connection, org_id: str) -> li
                         for s in sub_rows
                     ]
                 milestones.append(ms_obj)
+
+            milestones.sort(key=lambda x: CANONICAL_STAGE_ORDER.get(x["key"], x.get("stageOrder", 99)))
 
             materials = [
                 {

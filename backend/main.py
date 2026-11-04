@@ -139,7 +139,7 @@ async def _load_shared_state_snapshot(org_id: str) -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info(f"🚀 CFT Tracker FastAPI Server starting on port {PORT}")
+    logger.info(f"[CFT Tracker] FastAPI Server starting on port {PORT}")
     if is_db_configured():
         logger.info(f"[Database] Connecting to {MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}...")
         connected = await ping_db()

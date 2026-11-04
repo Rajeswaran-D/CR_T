@@ -52,8 +52,8 @@ const MainAppContent: React.FC = () => {
 
       const ROLE_MODULE_MAP: Record<Role, ModuleType> = {
         'Sales / AE (Customer PO)':     '1. Customer Purchase Order (PO)',
-        'Project Manager (PM Baseline)':'2. Baseline Review & Planning',
-        'AE (CORB Release)':            '3. CORB Release',
+        'AE (CORB Release)':            '2. CORB Release',
+        'Project Manager (PM Baseline)':'3. Baseline Review & Planning',
         'DE (BOM Release)':             '4. BOM Release',
         'Planner (WO Release)':         '5. Work Order (WO) Release',
         'SCM (Sub-Supplier PO)':        '6. Sub-Supplier PO',
@@ -117,12 +117,21 @@ const MainAppContent: React.FC = () => {
           {activeModule === "Administration & Governance" && (
             <AdministrationModule onSelectPO={(po) => setSelectedPOId(po.id)} />
           )}
-          {activeModule === "1. Customer Purchase Order (PO)" && <OrderIntakeModule />}
-          {activeModule === "2. Baseline Review & Planning" && (
-            <BaselinePlanningModule />
+          {activeModule === "1. Customer Purchase Order (PO)" && (
+            <OrderIntakeModule onNavigateModule={(mod) => handleSelectModule(mod as any)} />
           )}
-          {activeModule === "3. CORB Release" && (
-            <MilestoneModuleView stageKey="corb_release" stageTitle="3. CORB Release" stageOrder={3} responsibleRole="AE (CORB Release)" description="Verify Change Order / Review Board documentation, sign off specifications, and assign milestone dates." />
+          {activeModule === "2. CORB Release" && (
+            <MilestoneModuleView 
+              stageKey="corb_release" 
+              stageTitle="2. CORB Release" 
+              stageOrder={2} 
+              responsibleRole="AE (CORB Release)" 
+              description="Verify Change Order / Review Board documentation, sign off specifications, and assign milestone dates." 
+              onNavigateModule={(mod) => handleSelectModule(mod as any)}
+            />
+          )}
+          {activeModule === "3. Baseline Review & Planning" && (
+            <BaselinePlanningModule onNavigateModule={(mod) => handleSelectModule(mod as any)} />
           )}
           {activeModule === "4. BOM Release" && (
             <MilestoneModuleView stageKey="bom_release" stageTitle="4. BOM Release" stageOrder={4} responsibleRole="DE (BOM Release)" description="Verify Bill of Materials structure, engineering drawing revisions, and release design packages." />

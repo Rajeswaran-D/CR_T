@@ -212,21 +212,37 @@ export function normalizeLineDates(line: ProductLine, todayStr: string): Product
       ms.completionPct = 100;
     }
 
-    if (end && !start) {
-      const anchor = chainAnchorDate(normalized, i, todayStr);
-      const fallback = anchor && anchor <= end ? anchor : ms.committedBaselineStartDate;
-      start = fallback && fallback <= end ? fallback : end;
-    }
-
-    if (start) {
-      const anchor = chainAnchorDate(normalized, i, todayStr);
-      if (anchor && start < anchor) {
-        start = end ? (anchor <= end ? anchor : start) : anchor;
+    if (ms.key === 'corb_release') {
+      if (end) {
+        start = end;
+        ms.status = 'Completed';
+        ms.completionPct = 100;
+      } else {
+        ms.actualEndDate = undefined;
+        if (ms.status === 'In Progress' || ms.actualStartDate) {
+          ms.status = 'In Progress';
+        } else {
+          ms.status = 'Not Started';
+          ms.completionPct = 0;
+        }
       }
-    }
+    } else {
+      if (end && !start) {
+        const anchor = chainAnchorDate(normalized, i, todayStr);
+        const fallback = anchor && anchor <= end ? anchor : ms.committedBaselineStartDate;
+        start = fallback && fallback <= end ? fallback : end;
+      }
 
-    if (start && end && end < start) end = start;
-    if (!start && end) end = undefined;
+      if (start) {
+        const anchor = chainAnchorDate(normalized, i, todayStr);
+        if (anchor && start < anchor) {
+          start = end ? (anchor <= end ? anchor : start) : anchor;
+        }
+      }
+
+      if (start && end && end < start) end = start;
+      if (!start && end) end = undefined;
+    }
 
     ms.actualStartDate = start;
     ms.actualEndDate = end;
@@ -418,74 +434,115 @@ export function resolveLineMaterials(params: {
  * `raw_material` takes the longest material lead time when one is defined, so
  * the plan reflects real procurement instead of the template's nominal value.
  */
-export function buildTemplateSchedule(params: {
-  template?: CategoryTemplate;
-  designType: DesignType;
-  materials: MaterialItem[];
-  startDate: string;
-  lineId: string;
-  targetEndDate?: string;
-}): Milestone[] {
-  const { template, materials, startDate, lineId, targetEndDate } = params;
-
+/**
+ * Calculates and synchronizes the baseline schedule for a product line:
+ * - Stage 1 (Customer PO): Anchored on PO date.
+ * - Stage 2 (CORB Release): Start & end taken from CORB without delay calculation.
+ * - Stage 3 (PM Baseline): Approval milestone aligned with CORB completion.
+ * - Stages 4 to 14 (BOM Release -> Final Shipment):
+ *   Start on the last date (complete) of CORB, with remaining durations scaled
+ *   to fit the contractual committed delivery date while protecting raw material lead times.
+ */
+export function calculateMilestonesFromBOM(params: {
+  milestones: Milestone[];
+  poDate: string;
+  corbEndDate?: string;
+  deliveryDate?: string;
+  materials?: MaterialItem[];
+  customDurations?: Record<string, number>;
+}): {
+  milestones: Milestone[];
+  calculatedDeliveryDate: string;
+} {
+  const { milestones, poDate, corbEndDate, deliveryDate, materials, customDurations } = params;
   const rawMaterialLeadTime = (materials && materials.length > 0)
     ? Math.max(...materials.map(m => m.leadTimeDays))
     : 14;
 
-  let durations = (template?.milestoneDurations || []).filter(m => Boolean(m.milestoneKey));
-  
-  // If template is empty or uses legacy keys, fallback to standard 14 aligned stages
-  if (durations.length === 0 || !durations.some(m => m.milestoneKey === 'po_from_customer')) {
-    durations = [
-      { milestoneKey: 'po_from_customer', milestoneName: '1. Customer Purchase Order (PO)', durationDays: 1 },
-      { milestoneKey: 'pm_baseline', milestoneName: '2. Baseline Review & Planning', durationDays: 3 },
-      { milestoneKey: 'corb_release', milestoneName: '3. CORB Release', durationDays: 2 },
-      { milestoneKey: 'bom_release', milestoneName: '4. BOM Release', durationDays: 4 },
-      { milestoneKey: 'wo_release', milestoneName: '5. Work Order Release', durationDays: 2 },
-      { milestoneKey: 'sub_supplier_po', milestoneName: '6. Sub-Supplier PO', durationDays: 3 },
-      { milestoneKey: 'material_receipt', milestoneName: '7. Material Receipt (GRN)', durationDays: 14 },
-      { milestoneKey: 'machining', milestoneName: '8. Machining', durationDays: 14 },
-      { milestoneKey: 'assembly', milestoneName: '9. Assembly', durationDays: 5 },
-      { milestoneKey: 'fg', milestoneName: '10. FG', durationDays: 2 },
-      { milestoneKey: 'customer_inspection', milestoneName: '11. Customer Inspection', durationDays: 2 },
-      { milestoneKey: 'painting', milestoneName: '12. Painting', durationDays: 2 },
-      { milestoneKey: 'trn', milestoneName: '13. TRN', durationDays: 1 },
-      { milestoneKey: 'shipment', milestoneName: '14. Final Shipment & Dispatch', durationDays: 5 },
-    ];
-  }
+  const validPoDate = poDate && isValidDateString(poDate) ? poDate : todayLocal();
 
-  // Calculate raw unscaled durations
-  const rawDurations = durations.map(m => {
-    return Math.max(
-      1,
-      (m.milestoneKey === 'material_receipt' || m.milestoneKey === 'raw_material') && rawMaterialLeadTime > 0 ? rawMaterialLeadTime : m.durationDays
-    );
+  // 11 manufacturing stages from BOM Release through Final Shipment
+  const BOM_STAGE_KEYS = [
+    'bom_release',
+    'wo_release',
+    'sub_supplier_po',
+    'material_receipt',
+    'machining',
+    'assembly',
+    'fg',
+    'customer_inspection',
+    'painting',
+    'trn',
+    'shipment'
+  ];
+
+  const defaultBOMDurations: Record<string, number> = {
+    bom_release: 4,
+    wo_release: 2,
+    sub_supplier_po: 3,
+    material_receipt: rawMaterialLeadTime > 0 ? rawMaterialLeadTime : 14,
+    machining: 14,
+    assembly: 5,
+    fg: 2,
+    customer_inspection: 2,
+    painting: 2,
+    trn: 1,
+    shipment: 5
+  };
+
+  // Stage 1: PO Intake
+  const s1Start = validPoDate;
+  const s1End = validPoDate;
+  const s1Dur = 1;
+
+  // Stage 2: CORB Release (Single completion date input; no planned baseline dates)
+  const existingCorb = milestones.find(m => m.key === 'corb_release');
+  const corbCompletedDate = (corbEndDate && isValidDateString(corbEndDate))
+    ? corbEndDate
+    : (existingCorb?.actualEndDate && isValidDateString(existingCorb.actualEndDate) ? existingCorb.actualEndDate : '');
+  const effectiveCorbAnchor = corbCompletedDate || addDays(s1End, 1);
+
+  // Stage 3: PM Baseline Review (review gate following CORB)
+  const s3Start = addDays(effectiveCorbAnchor, 1);
+  const s3Dur = Math.max(1, customDurations?.['pm_baseline'] || 1);
+  const s3End = addDays(s3Start, s3Dur - 1);
+
+  // Stage 4: BOM Release (starts following CORB & Baseline review)
+  const bomStart = addDays(s3End, 1);
+
+  const rawDurations = BOM_STAGE_KEYS.map(key => {
+    if (customDurations && typeof customDurations[key] === 'number') {
+      return Math.max(1, customDurations[key]);
+    }
+    const existingMs = milestones.find(m => m.key === key);
+    if (existingMs && existingMs.committedDurationDays > 0) {
+      return (key === 'material_receipt' || key === 'raw_material') && rawMaterialLeadTime > 0
+        ? Math.max(existingMs.committedDurationDays, rawMaterialLeadTime)
+        : existingMs.committedDurationDays;
+    }
+    return defaultBOMDurations[key] || 2;
   });
 
   const totalRawDays = rawDurations.reduce((a, b) => a + b, 0);
 
-  // If targetEndDate is provided and is after startDate, scale durations proportionally to fit exact contractual delivery target
   let scaledDurations = [...rawDurations];
-  if (targetEndDate && isValidDateString(targetEndDate) && targetEndDate > startDate) {
-    const totalTargetDays = getDaysDifference(startDate, targetEndDate) + 1;
-    if (totalTargetDays >= durations.length) {
-      const matIdx = durations.findIndex(m => m.milestoneKey === 'material_receipt' || m.milestoneKey === 'raw_material');
+  if (deliveryDate && isValidDateString(deliveryDate) && deliveryDate > bomStart) {
+    const totalTargetDays = getDaysDifference(bomStart, deliveryDate) + 1;
+    if (totalTargetDays >= BOM_STAGE_KEYS.length) {
+      const matIdx = BOM_STAGE_KEYS.indexOf('material_receipt');
       const protectedMatDuration = (matIdx >= 0 && rawMaterialLeadTime > 0)
-        ? Math.min(rawMaterialLeadTime, Math.max(1, totalTargetDays - (durations.length - 1)))
+        ? Math.min(rawMaterialLeadTime, Math.max(1, totalTargetDays - (BOM_STAGE_KEYS.length - 1)))
         : 0;
 
       if (matIdx >= 0 && protectedMatDuration > 0) {
-        // Material stage receives its protected physical lead time; remaining days are scaled proportionally across non-material stages
         const nonMatRawDays = rawDurations.reduce((sum, d, idx) => idx === matIdx ? sum : sum + d, 0);
-        const remainingTargetDays = Math.max(durations.length - 1, totalTargetDays - protectedMatDuration);
+        const remainingTargetDays = Math.max(BOM_STAGE_KEYS.length - 1, totalTargetDays - protectedMatDuration);
         let allocatedNonMatDays = 0;
-        const nonMatCount = durations.length - 1;
+        const nonMatCount = BOM_STAGE_KEYS.length - 1;
         let nonMatSeen = 0;
 
         scaledDurations = rawDurations.map((rawD, idx) => {
-          if (idx === matIdx) {
-            return protectedMatDuration;
-          }
+          if (idx === matIdx) return protectedMatDuration;
           nonMatSeen++;
           if (nonMatSeen === nonMatCount) {
             return Math.max(1, remainingTargetDays - allocatedNonMatDays);
@@ -508,30 +565,143 @@ export function buildTemplateSchedule(params: {
     }
   }
 
-  let runningDate = startDate;
+  let bomRunningDate = bomStart;
+  const updated = milestones.map((ms, idx) => {
+    const isStage1 = ms.key === 'po_from_customer' || idx === 0;
+    const isStage2 = ms.key === 'corb_release' || idx === 1;
+    const isStage3 = ms.key === 'pm_baseline' || ms.key === 'baseline_review' || idx === 2;
 
-  return durations.map((m, idx) => {
-    const duration = scaledDurations[idx];
-    const msStart = runningDate;
-    const msEnd = addDays(msStart, duration - 1);
-    runningDate = addDays(msEnd, 1);
+    if (isStage1) {
+      return {
+        ...ms,
+        stageOrder: 1,
+        committedBaselineStartDate: s1Start,
+        committedBaselineEndDate: s1End,
+        committedDurationDays: s1Dur,
+        forecastStartDate: ms.actualStartDate || s1Start,
+        forecastEndDate: ms.actualEndDate || s1End,
+        varianceDays: 0
+      };
+    }
+    if (isStage2) {
+      const isCompleted = Boolean(corbCompletedDate);
+      return {
+        ...ms,
+        stageOrder: 2,
+        committedBaselineStartDate: '',
+        committedBaselineEndDate: '',
+        committedDurationDays: 0,
+        actualStartDate: undefined,
+        forecastStartDate: '',
+        forecastEndDate: corbCompletedDate || '',
+        actualEndDate: corbCompletedDate || undefined,
+        status: isCompleted ? ('Completed' as MilestoneStatus) : ('Not Started' as MilestoneStatus),
+        completionPct: isCompleted ? 100 : 0,
+        varianceDays: 0
+      };
+    }
+    if (isStage3) {
+      return {
+        ...ms,
+        stageOrder: 3,
+        committedBaselineStartDate: s3Start,
+        committedBaselineEndDate: s3End,
+        committedDurationDays: s3Dur,
+        forecastStartDate: ms.actualStartDate || s3Start,
+        forecastEndDate: ms.actualEndDate || s3End,
+        varianceDays: 0
+      };
+    }
+
+    const bomIdx = BOM_STAGE_KEYS.indexOf(ms.key);
+    const duration = bomIdx >= 0 ? scaledDurations[bomIdx] : (ms.committedDurationDays || 2);
+    const sStart = bomRunningDate;
+    const sEnd = addDays(sStart, Math.max(1, duration) - 1);
+    bomRunningDate = addDays(sEnd, 1);
 
     return {
-      id: `ms-${lineId}-${idx + 1}`,
-      key: m.milestoneKey,
-      name: m.milestoneName,
+      ...ms,
       stageOrder: idx + 1,
-      defaultDurationDays: duration,
-      committedBaselineStartDate: msStart,
-      committedBaselineEndDate: msEnd,
+      committedBaselineStartDate: sStart,
+      committedBaselineEndDate: sEnd,
       committedDurationDays: duration,
-      forecastStartDate: msStart,
-      forecastEndDate: msEnd,
-      varianceDays: 0,
-      status: 'Not Started' as MilestoneStatus,
-      completionPct: 0
+      forecastStartDate: ms.actualStartDate || sStart,
+      forecastEndDate: ms.actualEndDate || sEnd,
+      varianceDays: 0
     };
   });
+
+  const lastMs = updated[updated.length - 1];
+  const calculatedDeliveryDate = lastMs?.committedBaselineEndDate || deliveryDate || bomRunningDate;
+
+  return { milestones: updated, calculatedDeliveryDate };
+}
+
+/**
+ * Builds the initial committed baseline schedule across the canonical 14 stages:
+ * - Stage 1 (Customer PO): intake date.
+ * - Stage 2 (CORB Release): intake to CORB end.
+ * - Stage 3 (Baseline Planning & Review): review gate.
+ * - Stages 4 to 14 (BOM Release -> Shipment): starting from CORB end date and
+ *   proportionally calculated to delivery target date.
+ */
+export function buildTemplateSchedule(params: {
+  template?: CategoryTemplate;
+  designType: DesignType;
+  materials: MaterialItem[];
+  startDate: string;
+  lineId: string;
+  targetEndDate?: string;
+  corbEndDate?: string;
+}): Milestone[] {
+  const { template, materials, startDate, lineId, targetEndDate, corbEndDate } = params;
+
+  let durations = (template?.milestoneDurations || []).filter(m => Boolean(m.milestoneKey));
+  
+  if (durations.length === 0 || !durations.some(m => m.milestoneKey === 'po_from_customer')) {
+    durations = [
+      { milestoneKey: 'po_from_customer', milestoneName: '1. Customer Purchase Order (PO)', durationDays: 1 },
+      { milestoneKey: 'corb_release', milestoneName: '2. CORB Release', durationDays: 2 },
+      { milestoneKey: 'pm_baseline', milestoneName: '3. Baseline Review & Planning', durationDays: 1 },
+      { milestoneKey: 'bom_release', milestoneName: '4. BOM Release', durationDays: 4 },
+      { milestoneKey: 'wo_release', milestoneName: '5. Work Order Release', durationDays: 2 },
+      { milestoneKey: 'sub_supplier_po', milestoneName: '6. Sub-Supplier PO', durationDays: 3 },
+      { milestoneKey: 'material_receipt', milestoneName: '7. Material Receipt (GRN)', durationDays: 14 },
+      { milestoneKey: 'machining', milestoneName: '8. Machining', durationDays: 14 },
+      { milestoneKey: 'assembly', milestoneName: '9. Assembly', durationDays: 5 },
+      { milestoneKey: 'fg', milestoneName: '10. FG', durationDays: 2 },
+      { milestoneKey: 'customer_inspection', milestoneName: '11. Customer Inspection', durationDays: 2 },
+      { milestoneKey: 'painting', milestoneName: '12. Painting', durationDays: 2 },
+      { milestoneKey: 'trn', milestoneName: '13. TRN', durationDays: 1 },
+      { milestoneKey: 'shipment', milestoneName: '14. Final Shipment & Dispatch', durationDays: 5 },
+    ];
+  }
+
+  const baseMilestones: Milestone[] = durations.map((m, idx) => ({
+    id: `ms-${lineId}-${idx + 1}`,
+    key: m.milestoneKey,
+    name: m.milestoneName,
+    stageOrder: idx + 1,
+    defaultDurationDays: m.durationDays,
+    committedBaselineStartDate: startDate,
+    committedBaselineEndDate: startDate,
+    committedDurationDays: m.durationDays,
+    forecastStartDate: startDate,
+    forecastEndDate: startDate,
+    varianceDays: 0,
+    status: 'Not Started' as MilestoneStatus,
+    completionPct: 0
+  }));
+
+  const { milestones: scheduled } = calculateMilestonesFromBOM({
+    milestones: baseMilestones,
+    poDate: startDate,
+    corbEndDate: (corbEndDate && isValidDateString(corbEndDate)) ? corbEndDate : undefined,
+    deliveryDate: targetEndDate,
+    materials
+  });
+
+  return scheduled;
 }
 
 /** Last committed date across every line — the order's delivery date. */
@@ -684,7 +854,9 @@ export function recalculateProductLine(
           varianceDays = inheritedDelay;
         }
       } else {
-        if (forecastEnd && crossingLine && forecastEnd > crossingLine) {
+        if (!ms.actualStartDate && !ms.actualEndDate && !hasInPrepSub && !criticalMat?.expectedDate) {
+          varianceDays = inheritedDelay;
+        } else if (forecastEnd && crossingLine && forecastEnd > crossingLine) {
           const newDelay = getDaysDifference(crossingLine, forecastEnd);
           varianceDays = inheritedDelay + newDelay;
         } else {
@@ -714,7 +886,36 @@ export function recalculateProductLine(
     const delayedSub = ms.subdivisions?.find(s => s.status === 'Delayed');
     const allSubsDone = ms.subdivisions && ms.subdivisions.length > 0 && ms.subdivisions.every(s => s.status === 'Done');
 
-    if (delayedSub) {
+    if (ms.key === 'corb_release') {
+      ms.committedBaselineStartDate = '';
+      ms.committedBaselineEndDate = '';
+      ms.committedDurationDays = 0;
+      ms.forecastStartDate = '';
+      ms.forecastEndDate = ms.actualEndDate || '';
+      varianceDays = 0;
+      delayCategory = undefined;
+      delayReason = undefined;
+      delayOwner = undefined;
+      if (ms.actualEndDate) {
+        status = 'Completed';
+        ms.completionPct = 100;
+      } else if (ms.status === 'In Progress' || ms.actualStartDate) {
+        status = 'In Progress';
+        ms.completionPct = ms.completionPct || 50;
+      } else {
+        status = 'Not Started';
+        ms.completionPct = 0;
+      }
+    } else if (ms.key === 'pm_baseline' || ms.key === 'baseline_review') {
+      // Stage 3 Baseline Review is the gate following CORB.
+      // CORB completion never creates delay for Baseline Review before work begins.
+      if (!ms.actualStartDate && !ms.actualEndDate) {
+        varianceDays = 0;
+        delayCategory = undefined;
+        delayReason = undefined;
+        delayOwner = undefined;
+      }
+    } else if (delayedSub) {
       status = 'Delayed';
       if (delayedSub.delayCause) delayCategory = delayedSub.delayCause;
       if (delayedSub.delayNote) delayReason = delayedSub.delayNote;
@@ -922,6 +1123,18 @@ export function getMilestoneRevisedDates(
   fallbackPoDate?: string,
   fallbackPoDelivery?: string
 ): MilestoneRevisedDates {
+  if (ms.key === 'corb_release') {
+    return {
+      revisedStart: '',
+      revisedEnd: ms.actualEndDate || '',
+      shiftDays: 0,
+      baselineStart: '',
+      baselineEnd: '',
+      baselineDuration: 0,
+      isDelayed: false
+    };
+  }
+
   const baselineStart = ms.committedBaselineStartDate || fallbackPoDate || '';
   const baselineEnd = ms.committedBaselineEndDate || fallbackPoDelivery || '';
   const dur = Math.max(1, ms.committedDurationDays || 1);

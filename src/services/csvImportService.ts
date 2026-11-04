@@ -24,8 +24,8 @@ import {
 // Standard 14 Stages Metadata
 export const STANDARD_STAGES_IMPORT_MAP = [
   { stage: 1, key: 'po_from_customer', name: '1. Customer Purchase Order (PO)', colHeader: 'S1_CustomerPO_Actual', defaultDays: 1 },
-  { stage: 2, key: 'pm_baseline', name: '2. Baseline Review & Planning', colHeader: 'S2_PMBaseline_Actual', defaultDays: 3 },
-  { stage: 3, key: 'corb_release', name: '3. CORB Release', colHeader: 'S3_CORB_Actual', defaultDays: 2 },
+  { stage: 2, key: 'corb_release', name: '2. CORB Release', colHeader: 'S2_CORB_Actual', defaultDays: 2 },
+  { stage: 3, key: 'pm_baseline', name: '3. Baseline Review & Planning', colHeader: 'S3_PMBaseline_Actual', defaultDays: 3 },
   { stage: 4, key: 'bom_release', name: '4. BOM Release', colHeader: 'S4_BOMRelease_Actual', defaultDays: 4 },
   { stage: 5, key: 'wo_release', name: '5. Work Order Release', colHeader: 'S5_WORelease_Actual', defaultDays: 2 },
   { stage: 6, key: 'sub_supplier_po', name: '6. Sub-Supplier PO', colHeader: 'S6_SubSupplierPO_Actual', defaultDays: 3 },
@@ -50,8 +50,8 @@ export const STANDARD_STAGES_IMPORT_MAP = [
 
 export const STAGE_ACTUAL_ALIASES: Record<number, string[]> = {
   1: ['Customer PO Date', 'Customer PO Actual', 'Customer PO Intake', 'PO Intake', 'PO Date', 'Order Date Actual', 'Order Date', 'Date'],
-  2: ['PM Baseline Actual', 'PM Baseline Date', 'PM Baseline', 'Baseline Review & Planning', 'Baseline Review', 'Baseline Actual', 'Baseline Date', 'PM Baseline Schedule'],
-  3: ['CORB Release Actual', 'CORB Actual', 'CORB Actual Date', 'CORB Release Date', 'CORB Release', 'CORB Open Points Closure', 'CORB Open Points', 'CORB'],
+  2: ['CORB Release Actual', 'CORB Actual', 'CORB Actual Date', 'CORB Release Date', 'CORB Release', 'CORB Open Points Closure', 'CORB Open Points', 'CORB', 'S2_CORB_Actual'],
+  3: ['PM Baseline Actual', 'PM Baseline Date', 'PM Baseline', 'Baseline Review & Planning', 'Baseline Review', 'Baseline Actual', 'Baseline Date', 'PM Baseline Schedule', 'S3_PMBaseline_Actual', 'S2_PMBaseline_Actual'],
   4: ['BOM Release Actual', 'BOM Actual', 'BOM Release Date', 'BOM Release', 'BOM', 'Mini-BOM Actual', 'Mini-BOM Release Actual', 'Mini BOM Actual'],
   5: ['Work Order Release Actual', 'WO Release Actual', 'WO Actual', 'Work Order Release', 'WO Release Date', 'WO Release', 'Work Order', 'WO', 'PO - Long Leads Actual', 'Long Lead PO Actual', 'PO - Long Leads', 'Long Leads Actual'],
   // "PO" and "PO Date" are deliberately excluded: they are the customer-PO columns on
@@ -69,8 +69,8 @@ export const STAGE_ACTUAL_ALIASES: Record<number, string[]> = {
 
 export const STAGE_PLANNED_ALIASES: Record<number, string[]> = {
   1: ['S1_CustomerPO_Planned', 'Customer PO Planned', 'Customer PO Date', 'PO Date', 'Order Date Planned', 'Order Date Target', 'Order Date'],
-  2: ['S2_PMBaseline_Planned', 'PM Baseline Planned', 'PM Baseline Target', 'Baseline Planned', 'PM Baseline Plan'],
-  3: ['S3_CORB_Planned', 'CORB Release Planned', 'CORB Planned', 'CORB Plan', 'CORB Target Date', 'CORB Target', 'CORB Planned Date', 'CORB Plan Date'],
+  2: ['S2_CORB_Planned', 'S3_CORB_Planned', 'CORB Release Planned', 'CORB Planned', 'CORB Plan', 'CORB Target Date', 'CORB Target', 'CORB Planned Date', 'CORB Plan Date'],
+  3: ['S3_PMBaseline_Planned', 'S2_PMBaseline_Planned', 'PM Baseline Planned', 'PM Baseline Target', 'Baseline Planned', 'PM Baseline Plan'],
   4: ['S4_BOMRelease_Planned', 'BOM Release Planned', 'BOM Planned', 'BOM Plan', 'BOM Target Date', 'BOM Target', 'Mini-BOM Planned', 'Mini-BOM Plan', 'Mini BOM Planned'],
   5: ['S5_WORelease_Planned', 'Work Order Release Planned', 'WO Release Planned', 'Work Order Planned', 'WO Planned', 'PO - Long Leads Planned', 'Long Lead PO Planned'],
   6: ['S6_SubSupplierPO_Planned', 'Sub-Supplier PO Planned', 'Sub Supplier PO Planned', 'PO Planned', 'Next Milestone Planned', 'Next Milestone Plan', 'Next Milestone Target', 'Next Milestone Target Date'],
@@ -88,8 +88,8 @@ export const STAGE_PLANNED_ALIASES: Record<number, string[]> = {
 
 export const STAGE_DELAY_ALIASES: Record<number, string[]> = {
   1: ['S1_CustomerPO_Delay', 'Customer PO Delay'],
-  2: ['S2_PMBaseline_Delay', 'PM Baseline Delay', 'Baseline Delay'],
-  3: ['S3_CORB_Delay', 'Delay CORB Release', 'CORB Release Delay', 'CORB Delay', 'Clarification Delay after CORB', 'CORB Open Points Delay'],
+  2: ['S2_CORB_Delay', 'S3_CORB_Delay', 'Delay CORB Release', 'CORB Release Delay', 'CORB Delay', 'Clarification Delay after CORB', 'CORB Open Points Delay'],
+  3: ['S3_PMBaseline_Delay', 'S2_PMBaseline_Delay', 'PM Baseline Delay', 'Baseline Delay'],
   4: ['S4_BOMRelease_Delay', 'BOM Delay', 'Delay in BOM', 'BOM Release Delay'],
   5: ['S5_WORelease_Delay', 'Work Order Delay', 'WO Release Delay', 'WO Delay', 'Delay in Long lead PO', 'PO - Long Leads Delay', 'Long Lead PO Delay'],
   6: ['S6_SubSupplierPO_Delay', 'Sub-Supplier PO Delay', 'PO Delay', 'Delay in PO', 'Next Milestone Delay'],

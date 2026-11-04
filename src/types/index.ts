@@ -1,8 +1,8 @@
 export type Role = 
   | 'Project Management'
   | 'Sales / AE (Customer PO)'
-  | 'Project Manager (PM Baseline)'
   | 'AE (CORB Release)'
+  | 'Project Manager (PM Baseline)'
   | 'DE (BOM Release)'
   | 'Planner (WO Release)'
   | 'SCM (Sub-Supplier PO)'
@@ -96,7 +96,7 @@ export interface MaterialItem {
 export interface Milestone {
   id: string;
   // 14 exact milestone keys:
-  // 1: po_from_customer, 2: baseline_review (or pm_baseline), 3: corb_release, 4: bom_release,
+  // 1: po_from_customer, 2: corb_release, 3: pm_baseline (or baseline_review), 4: bom_release,
   // 5: wo_release, 6: sub_supplier_po, 7: material_receipt, 8: machining,
   // 9: assembly, 10: fg, 11: customer_inspection, 12: painting, 13: trn, 14: shipment
   key: string;
@@ -192,8 +192,8 @@ export const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
 
   // 14 Dedicated Milestone Slots with Isolated Permissions
   'Sales / AE (Customer PO)': { ...defaultSlotPerms, canCreatePO: true, canCreateProductLines: true, canEditPOHeader: true, allowedMilestones: ['po_from_customer'] },
-  'Project Manager (PM Baseline)': { ...defaultSlotPerms, canGenerateBaseline: true, canApproveBaseline: true, canEditPOHeader: true, canCloseOrder: true, allowedMilestones: ['pm_baseline', 'baseline_review'] },
   'AE (CORB Release)': { ...defaultSlotPerms, allowedMilestones: ['corb_release'] },
+  'Project Manager (PM Baseline)': { ...defaultSlotPerms, canGenerateBaseline: true, canApproveBaseline: true, canEditPOHeader: true, canCloseOrder: true, allowedMilestones: ['pm_baseline', 'baseline_review'] },
   'DE (BOM Release)': { ...defaultSlotPerms, allowedMilestones: ['bom_release'] },
   'Planner (WO Release)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['wo_release'] },
   'SCM (Sub-Supplier PO)': { ...defaultSlotPerms, canEditProcurement: true, allowedMilestones: ['sub_supplier_po'] },

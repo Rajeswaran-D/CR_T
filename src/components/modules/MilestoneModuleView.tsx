@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { MilestoneStatus, DelayCategory, PurchaseOrder, ProductLine, Milestone } from '../../types';
+import type { MilestoneStatus, DelayCategory, PurchaseOrder, ProductLine, Milestone, Role } from '../../types';
 import { isMilestoneOwnedByRole } from '../../types';
 import { validateEventDate, getDaysDifference, mergeDelayReason, addDays, getMilestoneRevisedDates } from '../../services/calculationEngine';
 import { 
@@ -20,7 +20,8 @@ import {
   EyeOff,
   X,
   Search,
-  PackageCheck
+  PackageCheck,
+  ShieldCheck
 } from 'lucide-react';
 import { CloseOrderModal } from '../modals/CloseOrderModal';
 import { DelayAnalysisFlow } from '../common/DelayAnalysisFlow';
@@ -31,12 +32,13 @@ interface MilestoneModuleViewProps {
   stageOrder: number;
   responsibleRole: string;
   description: string;
+  onNavigateModule?: (module: any) => void;
 }
 
 const ALL_14_STAGES = [
   { key: 'po_from_customer', label: '1. Customer PO' },
-  { key: 'pm_baseline', label: '2. PM Baseline' },
-  { key: 'corb_release', label: '3. CORB Release' },
+  { key: 'corb_release', label: '2. CORB Release' },
+  { key: 'pm_baseline', label: '3. PM Baseline' },
   { key: 'bom_release', label: '4. BOM Release' },
   { key: 'wo_release', label: '5. WO Release' },
   { key: 'sub_supplier_po', label: '6. Sub-Supplier PO' },
@@ -55,9 +57,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
   stageTitle,
   stageOrder,
   responsibleRole,
-  description
+  description,
+  onNavigateModule: _onNavigateModule
 }) => {
-  const { purchaseOrders, acceptMilestone, updateMilestoneEvent, batchUpdateMilestoneEvents, activeRole } = useApp();
+  const { purchaseOrders, acceptMilestone, updateMilestoneEvent, batchUpdateMilestoneEvents, activeRole, setActiveRole } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   // Default is 'active' so completed orders do not clutter the work queue
@@ -175,15 +178,15 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
   // Group purchase orders and calculate stage rollup data
   const validPOs = purchaseOrders.filter(po => {
     if (po.status === 'Cancelled' || po.isCancelled) return false;
-    if (stageKey === 'pm_baseline' || stageKey === 'baseline_review') return true;
-    const isStage2Done = (po.productLines || []).some(line => {
-      const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 2);
+    if (stageKey === 'pm_baseline' || stageKey === 'baseline_review' || stageKey === 'corb_release') return true;
+    const isBaselineDone = (po.productLines || []).some(line => {
+      const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3);
       return pm?.status === 'Completed' || Boolean(pm?.actualEndDate) || (pm?.completionPct === 100);
     });
     const hasSubsequentProgress = (po.productLines || []).some(line =>
-      (line.milestones || []).some(m => m.stageOrder > 2 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
+      (line.milestones || []).some(m => m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
     );
-    return (po.status !== 'Baseline Pending') || isStage2Done || hasSubsequentProgress;
+    return (po.status !== 'Baseline Pending') || isBaselineDone || hasSubsequentProgress;
   });
 
   const poStageGroups = validPOs.map(po => {
@@ -194,13 +197,19 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
       const hasSubsequent = (line.milestones || []).some((m, mIdx) => {
         const order = m.stageOrder || (mIdx + 1);
         const curOrder = milestone?.stageOrder || ((line.milestones || []).findIndex(x => x.key === stageKey) + 1);
-        return order > curOrder && (m.status === 'Completed' || Boolean(m.actualEndDate) || Boolean(m.actualStartDate) || m.status === 'In Progress');
+        return order > curOrder && (m.status === 'Completed' || Boolean(m.actualEndDate));
       });
-      const isDone = isStage1 || milestone?.status === 'Completed' || Boolean(milestone?.actualEndDate) || milestone?.completionPct === 100 || hasSubsequent;
-      const isStarted = Boolean(milestone?.actualStartDate) && !isDone;
-      const isDelayed = milestone?.status === 'Delayed' || (typeof milestone?.varianceDays === 'number' && milestone.varianceDays > 0);
-      const isReadyToStart = isPrereqDone && !isStarted && !isDone;
-      const isReadyToComplete = isPrereqDone && isStarted && !isDone;
+      const isDone = stageKey === 'corb_release'
+        ? ((Boolean(milestone?.actualEndDate) && milestone?.status === 'Completed') || milestone?.completionPct === 100)
+        : (isStage1 || milestone?.status === 'Completed' || Boolean(milestone?.actualEndDate) || milestone?.completionPct === 100 || hasSubsequent);
+      const isStarted = stageKey === 'corb_release' ? false : (Boolean(milestone?.actualStartDate) && !isDone);
+      const isDelayed = stageKey === 'corb_release' ? false : (milestone?.status === 'Delayed' || (typeof milestone?.varianceDays === 'number' && milestone.varianceDays > 0));
+      const isReadyToStart = stageKey === 'corb_release'
+        ? (isPrereqDone && !isDone)
+        : (isPrereqDone && !isStarted && !isDone);
+      const isReadyToComplete = stageKey === 'corb_release'
+        ? (isPrereqDone && !isDone)
+        : (isPrereqDone && isStarted && !isDone);
 
       return {
         line,
@@ -369,6 +378,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
       }
       setSuccessMessage(`Stage ${stageTitle} marked as Completed for ${targetLine.productName}.`);
       setTimeout(() => setSuccessMessage(null), 5000);
+
+      if (stageKey === 'corb_release') {
+        // CORB complete recorded. Ready for PM Baseline Review.
+      }
     } else {
       const effectiveStartDate = (stageKey === 'material_receipt' || key === 'material_receipt')
         ? (formData.orderedDate || formData.startDate || todayStr)
@@ -616,6 +629,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           : 0;
       }
 
+      if (stageKey === 'corb_release') {
+        newDelayFormed = 0;
+      }
+
       if (newDelayFormed > 0 && batchModal.selectedLineIds.length > 1) {
         setErrorMessage("When recording a delay, you must update the product lines individually.");
         return;
@@ -677,6 +694,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
       setSuccessMessage(`Successfully ${eventType === 'start' ? 'started' : 'completed'} stage ${stageTitle} for all ${itemsToUpdate.length} product lines in ${targetPO.poNumber}!`);
       setTimeout(() => setSuccessMessage(null), 5000);
       setBatchModal(prev => ({ ...prev, isOpen: false }));
+
+      if (stageKey === 'corb_release' && eventType === 'complete') {
+        // CORB complete recorded. Ready for PM Baseline Review.
+      }
     }
   };
 
@@ -694,9 +715,19 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
               {responsibleRole}
             </span>
             {!canManageStage && (
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                VIEW ONLY
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  VIEW ONLY
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveRole(responsibleRole as Role)}
+                  className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-600 hover:bg-teal-500 text-white border border-teal-400 transition-colors cursor-pointer shadow-xs flex items-center gap-1"
+                  title={`Switch to ${responsibleRole} to take action`}
+                >
+                  <ShieldCheck className="w-3 h-3" /> Switch to {responsibleRole}
+                </button>
+              </div>
             )}
           </div>
           <h1 className="text-2xl font-black tracking-tight">{stageTitle}</h1>
@@ -875,7 +906,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           ) : (
             filteredPOGroups.map(group => {
               const po = group.po;
-              const defaultOpen = false;
+              const defaultOpen = stageKey === 'corb_release';
               const isExpanded = isPOExpanded(po.id, defaultOpen);
               const showCompletedLines = Boolean(showCompletedLinesInCard[po.id]);
               const hasDelayedProducts = group.delayedLines > 0;
@@ -978,7 +1009,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       {/* BATCH ACTION BUTTONS FOR AUTHORIZED ROLE */}
                       {canManageStage && !group.isAllCompleted && (
                         <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-                          {group.readyToStartLines > 0 && (
+                          {stageKey !== 'corb_release' && group.readyToStartLines > 0 && (
                             <button
                               onClick={() => openBatchModal(group, 'start')}
                               className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs flex items-center gap-1.5"
@@ -993,12 +1024,27 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                             <button
                               onClick={() => openBatchModal(group, 'complete')}
                               className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs flex items-center gap-1.5"
-                              title="Complete this stage for all ready lines in one click"
+                              title={stageKey === 'corb_release' ? "Record CORB completion date for all lines in one click" : "Complete this stage for all ready lines in one click"}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              Batch Complete ({group.lines.filter(l => l.isPrereqDone && !l.isDone).length})
+                              {stageKey === 'corb_release' 
+                                ? `Complete CORB (${group.lines.filter(l => l.isPrereqDone && !l.isDone).length})`
+                                : `Batch Complete (${group.lines.filter(l => l.isPrereqDone && !l.isDone).length})`}
                             </button>
                           )}
+                        </div>
+                      )}
+
+                      {!canManageStage && !group.isAllCompleted && group.lines.some(l => l.isPrereqDone && !l.isDone) && (
+                        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                          <button
+                            onClick={() => setActiveRole(responsibleRole as Role)}
+                            className="px-3 py-1.5 bg-teal-800 hover:bg-teal-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs flex items-center gap-1.5"
+                            title={`Switch role to ${responsibleRole} to complete this stage`}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
+                            Switch to {responsibleRole} to Complete
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1114,6 +1160,29 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                 </div>
 
                                 {(() => {
+                                  if (stageKey === 'corb_release') {
+                                    return (
+                                      <div className="space-y-1 text-xs font-mono mt-1">
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600">
+                                          <span>Schedule Mode: <strong className="text-cyan-800">Event-Driven (No Planned Baseline Dates)</strong></span>
+                                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-cyan-50 text-cyan-800 border-cyan-200">
+                                            Single Completion Input
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                                          {milestone.actualEndDate ? (
+                                            <span className="text-emerald-700">CORB End Date - Completed: <strong className="text-emerald-900">{milestone.actualEndDate}</strong></span>
+                                          ) : (
+                                            <span className="text-slate-500 italic">Awaiting completion entry to anchor BOM &amp; manufacturing baseline</span>
+                                          )}
+                                          {milestone.docRef && (
+                                            <span className="text-slate-600">Doc: <strong>{milestone.docRef}</strong></span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
                                   const {
                                     revisedStart: lineRevStart,
                                     revisedEnd: lineRevEnd,
@@ -1203,7 +1272,15 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                 {/* WORKING ACTION BUTTONS */}
                                 {canManageStage && isPrereqDone && !isDone && (
                                   <div className="flex items-center gap-1.5">
-                                    {!milestone.actualStartDate ? (
+                                    {stageKey === 'corb_release' ? (
+                                      <button
+                                        onClick={() => openLineModal(po, line, 'complete')}
+                                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs flex items-center gap-1.5"
+                                        title="Record CORB Completion / End Date"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> Complete CORB...
+                                      </button>
+                                    ) : !milestone.actualStartDate ? (
                                       <>
                                         <button
                                           onClick={() => openLineModal(po, line, 'start')}
@@ -1779,7 +1856,14 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           {canManageStage && isPrereqDone && !isDone && (
                             <div className="flex items-center justify-end gap-1">
-                              {!milestone.actualStartDate ? (
+                              {stageKey === 'corb_release' ? (
+                                <button
+                                  onClick={() => openLineModal(po, line, 'complete')}
+                                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold rounded-lg cursor-pointer shadow-2xs flex items-center gap-1"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Complete CORB
+                                </button>
+                              ) : !milestone.actualStartDate ? (
                                 <button
                                   onClick={() => openLineModal(po, line, 'start')}
                                   className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold rounded-lg cursor-pointer shadow-2xs flex items-center gap-1"
@@ -1825,7 +1909,9 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                   STAGE EXECUTION • STAGE {stageOrder} OF 14 ({stageTitle})
                 </div>
                 <h3 className="text-lg font-black mt-0.5">
-                  {batchModal.selectedLineIds.length === 1 ? (
+                  {stageKey === 'corb_release' ? (
+                    'Record CORB Release Completion (End Date - Completed)'
+                  ) : batchModal.selectedLineIds.length === 1 ? (
                     batchModal.mode === 'start' ? 'Record Actual Start Date' : 'Record Actual Completion Date'
                   ) : (
                     batchModal.mode === 'start' ? 'Batch Record Start Date' : 'Batch Record Stage Completion'
@@ -2151,18 +2237,25 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       </div>
                     ) : (
                       <div>
+                        {stageKey === 'corb_release' && (
+                          <div className="mb-3 p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-cyan-950 text-xs">
+                            <strong>CORB Release:</strong> Enter only the completion date (end date). Downstream baseline planning for BOM Release (Stage 4) through Final Delivery (Stage 14) will be scheduled directly from this completion date.
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="block text-[11px] font-bold text-slate-700">
-                            {batchModal.mode === 'start' ? 'Actual Start Date' : 'Actual Completion Date'} <span className="text-rose-600">*</span>
+                            {stageKey === 'corb_release' ? 'CORB End Date - Completed' : batchModal.mode === 'start' ? 'Actual Start Date' : 'Actual Completion Date'} <span className="text-rose-600">*</span>
                           </label>
-                          <div className="flex items-center gap-2 text-[10px] font-mono">
-                            <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                              Planned: <strong>{batchModal.mode === 'start' ? msPlanStart : msPlanEnd}</strong>
-                            </span>
-                            <span className={sampleShiftDays > 0 ? "text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-bold" : "text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold"}>
-                              Revised Target: <strong>{batchModal.mode === 'start' ? msRevStart : msRevEnd}</strong>
-                            </span>
-                          </div>
+                          {stageKey !== 'corb_release' && (
+                            <div className="flex items-center gap-2 text-[10px] font-mono">
+                              <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                Planned: <strong>{batchModal.mode === 'start' ? msPlanStart : msPlanEnd}</strong>
+                              </span>
+                              <span className={sampleShiftDays > 0 ? "text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-bold" : "text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold"}>
+                                Revised Target: <strong>{batchModal.mode === 'start' ? msRevStart : msRevEnd}</strong>
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <input
                           type="date"
@@ -2380,6 +2473,23 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                 const consolidatedPreviousDelays = maxNetInheritedDelay > 0
                   ? Array.from(stageMap.values()).sort((a, b) => a.stageOrder - b.stageOrder)
                   : [];
+
+                // CORB Release: Single completion input without delay
+                if (stageKey === 'corb_release') {
+                  return (
+                    <div className="p-3.5 bg-cyan-50 border border-cyan-300 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-bold text-cyan-950 text-[11px]">
+                          <CheckCircle2 className="w-4 h-4 text-cyan-600 shrink-0" />
+                          <span>CORB Release Completion: BOM Release &amp; subsequent baseline planning will anchor to this date.</span>
+                        </div>
+                        <span className="font-mono font-bold text-cyan-800 text-[10px] bg-white px-2 py-0.5 rounded border border-cyan-300">
+                          0d Delay
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
 
                 // 1. ALL DELAYS RESOLVED / ON BASELINE SCHEDULE (0d net delay)
                 if (maxTotalDelay <= 0) {

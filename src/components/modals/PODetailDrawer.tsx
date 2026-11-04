@@ -14,7 +14,8 @@ import {
   Edit3,
   XCircle,
   ShieldAlert,
-  LayoutGrid
+  LayoutGrid,
+  Clock
 } from 'lucide-react';
 import { getPOManufacturingStatus, getStageFriendlyName } from '../../utils/statusUtils';
 import { getMilestoneRevisedDates } from '../../services/calculationEngine';
@@ -24,8 +25,8 @@ import { DelayAnalysisFlow } from '../common/DelayAnalysisFlow';
 
 const ALL_14_STAGES = [
   { key: 'po_from_customer', label: '1. Customer PO' },
-  { key: 'pm_baseline', label: '2. PM Baseline' },
-  { key: 'corb_release', label: '3. CORB' },
+  { key: 'corb_release', label: '2. CORB' },
+  { key: 'pm_baseline', label: '3. PM Baseline' },
   { key: 'bom_release', label: '4. BOM' },
   { key: 'wo_release', label: '5. WO' },
   { key: 'sub_supplier_po', label: '6. Sub-PO' },
@@ -337,12 +338,18 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
               </div>
 
               {!po.isClosed && canReviseBaseline && (
-                <button
-                  onClick={() => setShowRevisionModal(true)}
-                  className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-[11px] rounded-lg shrink-0 cursor-pointer shadow-2xs"
-                >
-                  {po.status === 'Baseline Pending' ? 'Approve Baseline' : statusSummary.isDelayed ? 'Review Baseline' : `Rev ${statusSummary.lastRevNum} Validated`}
-                </button>
+                po.status === 'Baseline Pending' && !po.productLines.every(l => Boolean(l.milestones.find(m => m.key === 'corb_release')?.actualEndDate)) ? (
+                  <span className="px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 font-bold text-[11px] rounded-lg shrink-0 flex items-center gap-1 shadow-2xs" title="Stage 2 (CORB Release) must be completed across all lines before baseline review.">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Awaiting CORB Release
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setShowRevisionModal(true)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-[11px] rounded-lg shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    {po.status === 'Baseline Pending' ? 'Approve Baseline' : statusSummary.isDelayed ? 'Review Baseline' : `Rev ${statusSummary.lastRevNum} Validated`}
+                  </button>
+                )
               )}
             </div>
 
@@ -635,15 +642,15 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                       const isStarted = (Boolean(ms.actualStartDate) || productLineMilestones.some(p => p.isLineStarted)) && !isCompleted;
                       const isInProgress = (isStarted || ms.status === 'In Progress') && !isCompleted;
                       
-                      // An order is no longer pending baseline once Stage 2 is completed or any subsequent stage has activity
-                      const isStage2Done = selectedLine.milestones.some(m =>
-                        (m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 2) &&
+                      // An order is no longer pending baseline once Stage 3 is completed or any subsequent stage has activity
+                      const isBaselineDone = selectedLine.milestones.some(m =>
+                        (m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3) &&
                         (m.status === 'Completed' || Boolean(m.actualEndDate))
                       );
                       const anySubsequentProgress = selectedLine.milestones.some(m =>
-                        m.stageOrder > 2 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate))
+                        m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate))
                       );
-                      const isPendingBaseline = (po.status === 'Baseline Pending') && !isStage2Done && !anySubsequentProgress;
+                      const isPendingBaseline = (po.status === 'Baseline Pending') && !isBaselineDone && !anySubsequentProgress;
 
                       // Find the first uncompleted milestone in the line (Stage 1 is already completed)
                       const activeStageIdx = selectedLine.milestones.findIndex((m, mIdx) => {
@@ -760,39 +767,53 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                             </div>
 
                             <div className="mt-1.5 space-y-1.5 text-[10px] font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
-                              {/* Planned Baseline row */}
-                              <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-slate-400 font-semibold uppercase">Planned Baseline:</span>{' '}
-                                  <strong className="text-slate-800">{bStart || 'N/A'} &rarr; {bEnd || 'N/A'}</strong>
-                                  <span className="text-slate-500 font-medium">({baselineDuration}d planned)</span>
-                                </div>
-                                {shiftDays > 0 ? (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                    {isNewDelayFormedAtThisStage && prevVariance > 0
-                                      ? `+${prevVariance}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay (+${addedDelayHere}d added here)`
-                                      : isNewDelayFormedAtThisStage
-                                      ? `+${addedDelayHere}d delay added at this stage`
-                                      : `+${shiftDays}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay`}
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                    On original baseline
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Revised Target (due to delay) */}
-                              {shiftDays > 0 && (
-                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60 text-amber-900">
+                              {ms.key === 'corb_release' ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-amber-700 font-semibold uppercase">Revised (due to delay):</span>{' '}
-                                    <strong className="text-amber-950">{revisedStart} &rarr; {revisedEnd}</strong>
+                                    <span className="text-slate-400 font-semibold uppercase">Schedule Mode:</span>{' '}
+                                    <strong className="text-cyan-800">Event-Driven (No Planned Baseline Dates)</strong>
                                   </div>
-                                  <span className="text-[9px] text-amber-700 font-medium">
-                                    Target start: {revisedStart} {prevEffectiveEnd ? `(Following Stage ${prevMs?.stageOrder || 'previous'} completion: ${prevEffectiveEnd})` : ''}
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                                    Single Completion Input
                                   </span>
                                 </div>
+                              ) : (
+                                <>
+                                  {/* Planned Baseline row */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-slate-400 font-semibold uppercase">Planned Baseline:</span>{' '}
+                                      <strong className="text-slate-800">{bStart || 'N/A'} &rarr; {bEnd || 'N/A'}</strong>
+                                      <span className="text-slate-500 font-medium">({baselineDuration}d planned)</span>
+                                    </div>
+                                    {shiftDays > 0 ? (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                        {isNewDelayFormedAtThisStage && prevVariance > 0
+                                          ? `+${prevVariance}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay (+${addedDelayHere}d added here)`
+                                          : isNewDelayFormedAtThisStage
+                                          ? `+${addedDelayHere}d delay added at this stage`
+                                          : `+${shiftDays}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay`}
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                        On original baseline
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Revised Target (due to delay) */}
+                                  {shiftDays > 0 && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60 text-amber-900">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-amber-700 font-semibold uppercase">Revised (due to delay):</span>{' '}
+                                        <strong className="text-amber-950">{revisedStart} &rarr; {revisedEnd}</strong>
+                                      </div>
+                                      <span className="text-[9px] text-amber-700 font-medium">
+                                        Target start: {revisedStart} {prevEffectiveEnd ? `(Following Stage ${prevMs?.stageOrder || 'previous'} completion: ${prevEffectiveEnd})` : ''}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
                               )}
 
                               {/* Actual Execution row (if started or completed) */}
@@ -874,28 +895,40 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
 
                             return (
                               <div className="shrink-0 flex items-center gap-1.5">
-                                {!ms.actualStartDate ? (
+                                {ms.key === 'corb_release' ? (
                                   <button
-                                    onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
-                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                                    onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
+                                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+                                    title="Record CORB End Date - Completed"
                                   >
-                                    <Play className="w-3 h-3 text-slate-600" /> Record Start
+                                    <CheckSquare className="w-3 h-3" /> Complete CORB
                                   </button>
                                 ) : (
-                                  <button
-                                    onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
-                                    className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer"
-                                    title="Edit / Re-enter Start Date"
-                                  >
-                                    <Edit3 className="w-3 h-3 text-slate-500" /> Edit Start
-                                  </button>
+                                  <>
+                                    {!ms.actualStartDate ? (
+                                      <button
+                                        onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
+                                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Play className="w-3 h-3 text-slate-600" /> Record Start
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
+                                        className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer"
+                                        title="Edit / Re-enter Start Date"
+                                      >
+                                        <Edit3 className="w-3 h-3 text-slate-500" /> Edit Start
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
+                                      className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <CheckSquare className="w-3 h-3" /> Mark Complete
+                                    </button>
+                                  </>
                                 )}
-                                <button
-                                  onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
-                                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
-                                >
-                                  <CheckSquare className="w-3 h-3" /> Mark Complete
-                                </button>
                               </div>
                             );
                           })()}

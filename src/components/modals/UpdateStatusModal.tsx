@@ -59,7 +59,7 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
       const initialDate = clampDateMax(rawInitial, today);
 
       setSelectedStageKey(targetStageKey);
-      setStatusAction('In Progress');
+      setStatusAction(targetStageKey === 'corb_release' ? 'Completed' : 'In Progress');
       setWorkNotes('');
       setDelayReasonInput('');
       setCompletionDate(initialDate);
@@ -82,8 +82,8 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
 
   const rawStages = [
     { key: 'po_from_customer',      name: '1. Customer Purchase Order (PO)' },
-    { key: 'pm_baseline',           name: '2. Baseline Review & Planning' },
-    { key: 'corb_release',          name: '3. CORB Release' },
+    { key: 'corb_release',          name: '2. CORB Release' },
+    { key: 'pm_baseline',           name: '3. Baseline Review & Planning' },
     { key: 'bom_release',           name: '4. BOM Release' },
     { key: 'wo_release',            name: '5. Work Order (WO) Release' },
     { key: 'sub_supplier_po',       name: '6. Sub-Supplier PO' },
@@ -137,17 +137,21 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
     const line = po?.productLines.find(l => l.id === lineId);
     const ms = line?.milestones || [];
     const lineActiveMs = ms.find(m => m.status !== 'Completed') || ms[ms.length - 1];
-    setSelectedStageKey(lineActiveMs?.key || 'production');
-    setStatusAction('In Progress');
+    const targetKey = lineActiveMs?.key || 'production';
+    setSelectedStageKey(targetKey);
+    setStatusAction(targetKey === 'corb_release' ? 'Completed' : 'In Progress');
     const plannedStart = lineActiveMs?.actualStartDate || lineActiveMs?.committedBaselineStartDate || lineActiveMs?.forecastStartDate || today;
     setCompletionDate(plannedStart);
   };
 
   const handleStageSelect = (stageKey: string) => {
     setSelectedStageKey(stageKey);
+    if (stageKey === 'corb_release') {
+      setStatusAction('Completed');
+    }
     const msIdx = milestones.findIndex(m => m.key === stageKey);
     const targetMs = milestones[msIdx];
-    if (statusAction === 'In Progress') {
+    if (statusAction === 'In Progress' && stageKey !== 'corb_release') {
       const plannedStart = targetMs?.actualStartDate || targetMs?.committedBaselineStartDate || targetMs?.forecastStartDate || today;
       setCompletionDate(plannedStart);
     } else {
@@ -176,7 +180,7 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
       return;
     }
 
-    if (statusAction === 'Completed' && currentMsStart && completionDate < currentMsStart) {
+    if (selectedStageKey !== 'corb_release' && statusAction === 'Completed' && currentMsStart && completionDate < currentMsStart) {
       setErrorMsg(`Completion date cannot be earlier than milestone's start date (${currentMsStart}).`);
       return;
     }
@@ -312,6 +316,22 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
 
           {/* Milestone Schedule Info (Planned days & Revised Target dates) */}
           {currentMs && (() => {
+            if (selectedStageKey === 'corb_release') {
+              return (
+                <div className="p-3 bg-cyan-50/60 border border-cyan-200 rounded-xl space-y-1.5 text-xs font-mono">
+                  <div className="flex items-center justify-between text-cyan-950 font-bold">
+                    <span>Schedule Mode: Event-Driven</span>
+                    <span className="text-[10px] text-cyan-800 bg-white px-2 py-0.5 rounded border border-cyan-200">
+                      No Planned Baseline Dates
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-cyan-900 font-normal pt-1 border-t border-cyan-200/60">
+                    Enter the completion date for CORB Release. All subsequent milestones from BOM Release (Stage 4) to Final Shipment (Stage 14) will be planned from this completion date.
+                  </div>
+                </div>
+              );
+            }
+
             const bStart = currentMs.committedBaselineStartDate || po.poDate;
             const bEnd = currentMs.committedBaselineEndDate || po.committedDeliveryDate;
             const dur = Math.max(1, currentMs.committedDurationDays || 1);
@@ -356,8 +376,10 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
             return (
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-900 flex items-center justify-between">
-                  <span>{statusAction === 'Completed' ? 'Completion Date' : 'Start Date'}</span>
-                  <span className="text-[10px] font-mono text-slate-500">Delay is calculated automatically</span>
+                  <span>{selectedStageKey === 'corb_release' ? 'CORB End Date - Completed' : statusAction === 'Completed' ? 'Completion Date' : 'Start Date'}</span>
+                  <span className="text-[10px] font-mono text-slate-500">
+                    {selectedStageKey === 'corb_release' ? 'Single date input for CORB' : 'Delay is calculated automatically'}
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -385,38 +407,49 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
           })()}
 
           {/* Select Status Action */}
-          <div className="space-y-1.5">
-            <label className="font-bold text-slate-900">Work Condition / Action</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleActionSelect('In Progress')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  statusAction === 'In Progress'
-                    ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Play className="w-3.5 h-3.5" /> In Progress
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleActionSelect('Completed')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  statusAction === 'Completed'
-                    ? 'bg-emerald-700 border-emerald-800 text-white shadow-xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Stage Complete
-              </button>
-
+          {selectedStageKey === 'corb_release' ? (
+            <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-950 font-medium space-y-1">
+              <div className="font-bold text-cyan-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-cyan-700" />
+                CORB Release Sign-Off
+              </div>
+              <p className="text-[11px] text-cyan-800">
+                CORB takes only the completion date (end date). Baseline planning from BOM Release through Final Delivery will be scheduled starting from this date without delay penalties.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="font-bold text-slate-900">Work Condition / Action</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleActionSelect('In Progress')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    statusAction === 'In Progress'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Play className="w-3.5 h-3.5" /> In Progress
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleActionSelect('Completed')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    statusAction === 'Completed'
+                      ? 'bg-emerald-700 border-emerald-800 text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Stage Complete
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Delay Reason Field - Clearly distinguishing new stage delays vs inherited delays */}
-          {currentMs && Boolean(
+          {selectedStageKey !== 'corb_release' && currentMs && Boolean(
             (statusAction === 'In Progress' && currentMs.committedBaselineStartDate && completionDate > currentMs.committedBaselineStartDate) ||
             (statusAction !== 'In Progress' && currentMs.committedBaselineEndDate && completionDate > currentMs.committedBaselineEndDate)
           ) && (

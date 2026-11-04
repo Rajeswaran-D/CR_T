@@ -71,7 +71,7 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
             </div>
           </div>
           <button
-            onClick={() => onNavigateModule('2. Baseline Review & Planning')}
+            onClick={() => onNavigateModule('3. Baseline Review & Planning')}
             className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shrink-0 transition-colors cursor-pointer"
           >
             Review Baseline &rarr;

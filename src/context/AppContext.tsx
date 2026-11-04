@@ -36,7 +36,8 @@ import {
   resolveLineMaterials,
   buildTemplateSchedule,
   getOrderDeliveryDate,
-  getDaysDifference
+  getDaysDifference,
+  calculateMilestonesFromBOM
 } from '../services/calculationEngine';
 import { getSharedStateEndpoint, getStorageConfig, STORAGE_KEYS, type StorageKey } from '../services/storageContract';
 
@@ -384,25 +385,37 @@ const getPurchaseOrderStatus = (productLines: PurchaseOrder['productLines'], isC
  * terminal/pending state (Baseline Pending, Closed, Cancelled).
  */
 const withRefreshedStatus = (po: PurchaseOrder, productLines: PurchaseOrder['productLines']): PurchaseOrder => {
-  const isStage2Done = productLines.length > 0 && productLines.every(line => {
-    const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 2);
+  const isBaselineDone = productLines.length > 0 && productLines.every(line => {
+    const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3);
     return pm?.status === 'Completed' || Boolean(pm?.actualEndDate) || (pm?.completionPct === 100);
   });
   const hasSubsequentProgress = productLines.some(line => 
-    (line.milestones || []).some(m => m.stageOrder > 2 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
+    (line.milestones || []).some(m => m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
   );
-  const stillPendingBaseline = (po.status === 'Baseline Pending') && !isStage2Done && !hasSubsequentProgress;
+  const stillPendingBaseline = (po.status === 'Baseline Pending') && !isBaselineDone && !hasSubsequentProgress;
+
+  const cleanLines = stillPendingBaseline
+    ? productLines.map(line => ({
+        ...line,
+        overallVarianceDays: 0,
+        status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
+        milestones: line.milestones.map(m => ({
+          ...m,
+          varianceDays: 0
+        }))
+      }))
+    : productLines;
 
   return {
     ...po,
-    productLines,
+    productLines: cleanLines,
     status: po.isCancelled || po.status === 'Cancelled'
       ? 'Cancelled'
       : po.isClosed
       ? 'Closed'
       : stillPendingBaseline
       ? 'Baseline Pending'
-      : getPurchaseOrderStatus(productLines, po.isClosed),
+      : getPurchaseOrderStatus(cleanLines, po.isClosed),
     lastUpdatedAt: new Date().toISOString()
   };
 };
@@ -424,10 +437,30 @@ function loadConfigThresholds(): { atRisk: number; delayed: number } {
   return { atRisk: 3, delayed: 7 };
 }
 
+const STAGE_ORDER_MAP: Record<string, number> = {
+  po_from_customer: 1,
+  corb_release: 2,
+  pm_baseline: 3,
+  baseline_review: 3,
+  bom_release: 4,
+  wo_release: 5,
+  sub_supplier_po: 6,
+  material_receipt: 7,
+  raw_material: 7,
+  machining: 8,
+  assembly: 9,
+  fg: 10,
+  qc_pass: 10,
+  customer_inspection: 11,
+  painting: 12,
+  trn: 13,
+  shipment: 14
+};
+
 const ALIGNED_14_STAGES = [
   { key: 'po_from_customer', name: '1. Customer Purchase Order (PO)', durationDays: 1 },
-  { key: 'pm_baseline', name: '2. Baseline Review & Planning', durationDays: 3 },
-  { key: 'corb_release', name: '3. CORB Release', durationDays: 2 },
+  { key: 'corb_release', name: '2. CORB Release', durationDays: 2 },
+  { key: 'pm_baseline', name: '3. Baseline Review & Planning', durationDays: 3 },
   { key: 'bom_release', name: '4. BOM Release', durationDays: 4 },
   { key: 'wo_release', name: '5. Work Order Release', durationDays: 2 },
   { key: 'sub_supplier_po', name: '6. Sub-Supplier PO', durationDays: 3 },
@@ -457,35 +490,49 @@ function repairMilestonesTo14Aligned(
   // If the product line already has 14 fully initialized milestones with committed baseline dates,
   // preserve the established baseline schedule without wiping or re-scaling, ensuring consecutive continuity.
   const hasFullCommitted14 = cleanExistingMilestones.length === 14 && 
-    cleanExistingMilestones.every(m => m.committedBaselineStartDate && m.committedBaselineEndDate);
+    cleanExistingMilestones.every(m => m.key === 'corb_release' || (m.committedBaselineStartDate && m.committedBaselineEndDate));
 
   if (hasFullCommitted14) {
     let runningChainDate = start;
     return ALIGNED_14_STAGES.map((def, idx) => {
-      const existing = cleanExistingMilestones.find(m => m.key === def.key || m.stageOrder === idx + 1) || cleanExistingMilestones[idx];
+      const existing = cleanExistingMilestones.find(m => m.key === def.key || (m.key === 'baseline_review' && def.key === 'pm_baseline') || (m.key === 'qc_pass' && def.key === 'fg')) || cleanExistingMilestones[idx];
       // Imported spreadsheets are authoritative for each explicit baseline date.
       // Do not rebuild a contiguous chain here: real tracker plans may contain
       // gaps or out-of-order anchors, and regenerating them changes the Excel plan.
-      const msStart = existing.committedBaselineStartDate || (idx === 0 ? start : runningChainDate);
+      const isCorb = def.key === 'corb_release';
+      const msStart = isCorb ? '' : (existing.committedBaselineStartDate || (idx === 0 ? start : runningChainDate));
       const isMatStage = def.key === 'material_receipt' || def.key === 'raw_material';
-      const baseDur = isMatStage && rawMaterialLeadTime > 0
+      const baseDur = isCorb ? 0 : (isMatStage && rawMaterialLeadTime > 0
         ? Math.max(existing.committedDurationDays || def.durationDays, rawMaterialLeadTime)
-        : Math.max(1, existing.committedDurationDays || def.durationDays);
-      const msEnd = existing.committedBaselineEndDate || addDays(msStart, baseDur - 1);
-      runningChainDate = addDays(msEnd, 1);
+        : Math.max(1, existing.committedDurationDays || def.durationDays));
+      const msEnd = isCorb ? '' : (existing.committedBaselineEndDate || addDays(msStart, baseDur - 1));
+      if (!isCorb) {
+        runningChainDate = addDays(msEnd, 1);
+      }
 
       const isStage1 = def.key === 'po_from_customer' || idx === 0;
-      const hasLaterProgress = cleanExistingMilestones.some((m, mIdx) => {
-        const order = m.stageOrder || (mIdx + 1);
-        return order > (idx + 1) && (m.status === 'Completed' || Boolean(m.actualEndDate) || Boolean(m.actualStartDate) || m.status === 'In Progress');
+      const currentStageNum = STAGE_ORDER_MAP[def.key] || (idx + 1);
+      const hasLaterProgress = cleanExistingMilestones.some(m => {
+        const order = STAGE_ORDER_MAP[m.key] || m.stageOrder || 0;
+        return order > currentStageNum && (m.status === 'Completed' || Boolean(m.actualEndDate) || Boolean(m.actualStartDate) || m.status === 'In Progress');
       });
       const stage1Start = isStage1
         ? (existing?.actualStartDate || poDate || msStart)
+        : isCorb
+        ? undefined
         : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
       const stage1End = isStage1
         ? (existing?.actualEndDate || stage1Start || poDate || msStart)
+        : isCorb
+        ? existing?.actualEndDate
         : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
-      const isEffectivelyCompleted = isStage1 || Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start));
+      const isEffectivelyCompleted = isStage1
+        ? true
+        : isCorb
+        ? Boolean(existing?.actualEndDate)
+        : (def.key === 'pm_baseline' || def.key === 'baseline_review')
+        ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
+        : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
 
       return {
         ...existing,
@@ -498,9 +545,9 @@ function repairMilestonesTo14Aligned(
         committedDurationDays: baseDur,
         actualStartDate: stage1Start,
         actualEndDate: stage1End,
-        forecastStartDate: existing.forecastStartDate || stage1Start || msStart,
-        forecastEndDate: existing.forecastEndDate || stage1End || msEnd,
-        varianceDays: isStage1 ? 0 : (existing?.varianceDays || 0),
+        forecastStartDate: isCorb ? '' : (existing.forecastStartDate || stage1Start || msStart),
+        forecastEndDate: isCorb ? (existing?.actualEndDate || '') : (existing.forecastEndDate || stage1End || msEnd),
+        varianceDays: (isStage1 || isCorb) ? 0 : (existing?.varianceDays || 0),
         status: isEffectivelyCompleted ? ('Completed' as MilestoneStatus) : (stage1Start ? ('In Progress' as MilestoneStatus) : (existing?.status || ('Not Started' as MilestoneStatus))),
         completionPct: isEffectivelyCompleted ? 100 : (stage1Start ? Math.max(existing?.completionPct || 50, 50) : (existing?.completionPct || 0)),
         docRef: isStage1 ? (existing?.docRef || 'PO-INTAKE') : existing?.docRef
@@ -543,23 +590,38 @@ function repairMilestonesTo14Aligned(
 
   let runningDate = start;
   return ALIGNED_14_STAGES.map((def, idx) => {
-    const existing = cleanExistingMilestones.find(m => m.key === def.key || (m.key === 'baseline_review' && def.key === 'pm_baseline') || (m.key === 'qc_pass' && def.key === 'fg') || m.stageOrder === idx + 1);
-    const duration = scaledDurations[idx];
-    const msStart = runningDate;
-    const msEnd = addDays(msStart, duration - 1);
-    runningDate = addDays(msEnd, 1);
+    const existing = cleanExistingMilestones.find(m => m.key === def.key || (m.key === 'baseline_review' && def.key === 'pm_baseline') || (m.key === 'qc_pass' && def.key === 'fg')) || cleanExistingMilestones[idx];
+    const isCorb = def.key === 'corb_release';
+    const duration = isCorb ? 0 : scaledDurations[idx];
+    const msStart = isCorb ? '' : runningDate;
+    const msEnd = isCorb ? '' : addDays(msStart, Math.max(1, duration) - 1);
+    if (!isCorb) {
+      runningDate = addDays(msEnd, 1);
+    }
     const isStage1 = def.key === 'po_from_customer' || idx === 0;
-    const hasLaterProgress = cleanExistingMilestones.some((m, mIdx) => {
-      const order = m.stageOrder || (mIdx + 1);
-      return order > (idx + 1) && (m.status === 'Completed' || Boolean(m.actualEndDate) || Boolean(m.actualStartDate) || m.status === 'In Progress');
+    const currentStageNum = STAGE_ORDER_MAP[def.key] || (idx + 1);
+    const hasLaterProgress = cleanExistingMilestones.some(m => {
+      const order = STAGE_ORDER_MAP[m.key] || m.stageOrder || 0;
+      return order > currentStageNum && (m.status === 'Completed' || Boolean(m.actualEndDate) || Boolean(m.actualStartDate) || m.status === 'In Progress');
     });
+    const isCorbCompleted = isCorb && Boolean(existing?.actualEndDate) && existing?.status === 'Completed';
     const stage1Start = isStage1
       ? (existing?.actualStartDate || poDate || msStart)
+      : isCorb
+      ? undefined
       : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
     const stage1End = isStage1
       ? (existing?.actualEndDate || stage1Start || poDate || msStart)
+      : isCorb
+      ? (isCorbCompleted ? existing?.actualEndDate : undefined)
       : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
-    const isEffectivelyCompleted = isStage1 || Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start));
+    const isEffectivelyCompleted = isStage1
+      ? true
+      : isCorb
+      ? isCorbCompleted
+      : (def.key === 'pm_baseline' || def.key === 'baseline_review')
+      ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
+      : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
 
     return {
       id: `ms-${lineId}-${def.key}`,
@@ -572,9 +634,9 @@ function repairMilestonesTo14Aligned(
       committedDurationDays: duration,
       actualStartDate: stage1Start,
       actualEndDate: stage1End,
-      forecastStartDate: existing?.forecastStartDate || stage1Start || msStart,
-      forecastEndDate: existing?.forecastEndDate || stage1End || msEnd,
-      varianceDays: isStage1 ? 0 : (existing?.varianceDays || 0),
+      forecastStartDate: isCorb ? '' : (existing?.forecastStartDate || stage1Start || msStart),
+      forecastEndDate: isCorb ? (existing?.actualEndDate || '') : (existing?.forecastEndDate || stage1End || msEnd),
+      varianceDays: (isStage1 || isCorb) ? 0 : (existing?.varianceDays || 0),
       status: isEffectivelyCompleted ? ('Completed' as MilestoneStatus) : (stage1Start ? ('In Progress' as MilestoneStatus) : (existing?.status || ('Not Started' as MilestoneStatus))),
       completionPct: isEffectivelyCompleted ? 100 : (stage1Start ? Math.max(existing?.completionPct || 50, 50) : (existing?.completionPct || 0)),
       docRef: isStage1 ? (existing?.docRef || 'PO-INTAKE') : existing?.docRef,
@@ -593,12 +655,12 @@ const normalizeMilestoneFlows = (orders: PurchaseOrder[], todayStr: string): Pur
   const recalculatedLines = po.productLines.map(line => {
     const cleanMs = (line.milestones || []).map(m => ({
       ...m,
-      committedBaselineStartDate: sanitizeDateStr(m.committedBaselineStartDate, cleanPoDate),
-      committedBaselineEndDate: sanitizeDateStr(m.committedBaselineEndDate, cleanCommittedDate),
-      actualStartDate: m.actualStartDate ? sanitizeDateStr(m.actualStartDate) : undefined,
+      committedBaselineStartDate: m.key === 'corb_release' ? '' : sanitizeDateStr(m.committedBaselineStartDate, cleanPoDate),
+      committedBaselineEndDate: m.key === 'corb_release' ? '' : sanitizeDateStr(m.committedBaselineEndDate, cleanCommittedDate),
+      actualStartDate: m.key === 'corb_release' ? undefined : (m.actualStartDate ? sanitizeDateStr(m.actualStartDate) : undefined),
       actualEndDate: m.actualEndDate ? sanitizeDateStr(m.actualEndDate) : undefined,
-      forecastStartDate: sanitizeDateStr(m.forecastStartDate, cleanPoDate),
-      forecastEndDate: sanitizeDateStr(m.forecastEndDate, cleanCommittedDate),
+      forecastStartDate: m.key === 'corb_release' ? '' : sanitizeDateStr(m.forecastStartDate, cleanPoDate),
+      forecastEndDate: m.key === 'corb_release' ? (m.actualEndDate ? sanitizeDateStr(m.actualEndDate) : '') : sanitizeDateStr(m.forecastEndDate, cleanCommittedDate),
     }));
     const cleanMats = (line.materials || []).map(mat => ({
       ...mat,
@@ -623,24 +685,38 @@ const normalizeMilestoneFlows = (orders: PurchaseOrder[], todayStr: string): Pur
     return end && end > latest ? end : latest;
   }, '');
 
-  const isStage2Done = recalculatedLines.length > 0 && recalculatedLines.every(line => {
-    const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 2);
+  const isBaselineDone = recalculatedLines.length > 0 && recalculatedLines.every(line => {
+    const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3);
     return pm?.status === 'Completed' || Boolean(pm?.actualEndDate) || (pm?.completionPct === 100);
   });
   const hasSubsequentProgress = recalculatedLines.some(line => 
-    (line.milestones || []).some(m => m.stageOrder > 2 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
+    (line.milestones || []).some(m => m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
   );
-  const stillPendingBaseline = (po.status === 'Baseline Pending') && !isStage2Done && !hasSubsequentProgress;
+  const stillPendingBaseline = (po.status === 'Baseline Pending') && !isBaselineDone && !hasSubsequentProgress;
+
+  const productLines = stillPendingBaseline
+    ? recalculatedLines.map(line => ({
+        ...line,
+        overallVarianceDays: 0,
+        status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
+        milestones: line.milestones.map(m => ({
+          ...m,
+          varianceDays: 0
+        }))
+      }))
+    : recalculatedLines;
 
   return {
     ...po,
     poDate: cleanPoDate,
     committedDeliveryDate: cleanCommittedDate,
-    revisedDeliveryDate: (maxFinalForecast && maxFinalForecast > cleanCommittedDate) ? maxFinalForecast : cleanRevisedDate,
-    productLines: recalculatedLines,
+    revisedDeliveryDate: stillPendingBaseline
+      ? cleanCommittedDate
+      : ((maxFinalForecast && maxFinalForecast > cleanCommittedDate) ? maxFinalForecast : cleanRevisedDate),
+    productLines,
     status: po.isCancelled || po.status === 'Cancelled'
       ? 'Cancelled'
-      : po.isClosed ? 'Closed' : stillPendingBaseline ? 'Baseline Pending' : getPurchaseOrderStatus(recalculatedLines, po.isClosed)
+      : po.isClosed ? 'Closed' : stillPendingBaseline ? 'Baseline Pending' : getPurchaseOrderStatus(productLines, po.isClosed)
   };
 });
 
@@ -1180,6 +1256,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     for (let i = completedIndex + 1; i < result.length; i++) {
       const ms = result[i];
       if (ms.status === 'Completed') break; // stop at already-completed milestones
+      if (ms.key === 'corb_release') {
+        result[i] = {
+          ...ms,
+          committedBaselineStartDate: '',
+          committedBaselineEndDate: '',
+          committedDurationDays: 0,
+          forecastStartDate: '',
+          forecastEndDate: ms.actualEndDate || ''
+        };
+        continue;
+      }
 
       const prevMs = result[i - 1];
       const prevEnd = prevMs.actualEndDate || prevMs.forecastEndDate || completionDate;
@@ -1294,7 +1381,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? chainedEarliest
         : (ms.forecastStartDate || baselineStart || chainedEarliest || '');
 
-      if (isMaterialStage) {
+      if (item.milestoneKey === 'corb_release') {
+        // Stage 2 (CORB Release) has no planned baseline dates and is strictly a gate capturing
+        // the completion date that anchors subsequent BOM baseline planning. It never incurs delay variance.
+        isNewDelayCausedByStage = false;
+        newDelayDays = 0;
+        revisedTargetLimit = '';
+      } else if (isMaterialStage) {
         const targetDelivery = targetStart ? addDays(targetStart, Math.max(0, matLeadTime - 1)) : (ms.forecastEndDate || baselineEnd || '');
         const crossingLine = item.expectedDate || targetDelivery || baselineEnd || '';
 
@@ -1416,11 +1509,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const item = itemsForPO.find(it => it.productLineId === l.id);
         if (!item) return l;
 
-        const currentMsIndex = l.milestones.findIndex(m => m.key === item.milestoneKey);
-        let updatedMsList = l.milestones.map(m => {
-          if (m.key !== item.milestoneKey) return m;
+        // Ensure milestones are canonically sorted: 1. po_from_customer, 2. corb_release, 3. pm_baseline ...
+        const sortedMilestones = [...l.milestones].sort((a, b) => {
+          const oA = STAGE_ORDER_MAP[a.key] || a.stageOrder || 0;
+          const oB = STAGE_ORDER_MAP[b.key] || b.stageOrder || 0;
+          return oA - oB;
+        });
 
-          const newMs = { ...m };
+        const currentMsIndex = sortedMilestones.findIndex(m => m.key === item.milestoneKey);
+        let updatedMsList = sortedMilestones.map((m, sIdx) => {
+          if (m.key !== item.milestoneKey) return { ...m, stageOrder: sIdx + 1 };
+
+          const newMs = { ...m, stageOrder: sIdx + 1 };
           if (item.eventType === 'start') {
             newMs.actualStartDate = item.eventDate;
             newMs.forecastStartDate = item.eventDate;
@@ -1428,22 +1528,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             newMs.status = 'In Progress' as MilestoneStatus;
           } else {
             if (!newMs.actualStartDate) {
-              const anchor = chainAnchorDate(l.milestones, currentMsIndex, todayStr);
+              const anchor = chainAnchorDate(sortedMilestones, currentMsIndex, todayStr);
               newMs.actualStartDate = anchor && anchor <= item.eventDate ? anchor : item.eventDate;
             }
             newMs.actualEndDate = item.eventDate;
             newMs.forecastEndDate = item.eventDate;
             newMs.status = 'Completed' as MilestoneStatus;
             newMs.completionPct = 100;
+            if (item.milestoneKey === 'corb_release') {
+              newMs.varianceDays = 0;
+              newMs.delayCategory = undefined;
+              newMs.delayOwner = undefined;
+              newMs.delayReason = undefined;
+            }
           }
 
           if (item.approvalRef) newMs.approvalReference = item.approvalRef;
           if (item.drawingNo) newMs.drawingNumber = item.drawingNo;
           if (item.ecnNo) newMs.ecnNumber = item.ecnNo;
-          if (item.delayCategory) newMs.delayCategory = item.delayCategory;
-          if (item.delayOwner) newMs.delayOwner = item.delayOwner;
-          if (item.delayReason && !item.delayReason.startsWith('Inherited') && !item.delayReason.startsWith('Cascaded')) {
-            newMs.delayReason = item.delayReason;
+          if (item.milestoneKey !== 'corb_release') {
+            if (item.delayCategory) newMs.delayCategory = item.delayCategory;
+            if (item.delayOwner) newMs.delayOwner = item.delayOwner;
+            if (item.delayReason && !item.delayReason.startsWith('Inherited') && !item.delayReason.startsWith('Cascaded')) {
+              newMs.delayReason = item.delayReason;
+            }
           }
 
           newMs.lastUpdatedBy = item.user;
@@ -1455,9 +1563,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         // When completing or starting a milestone, auto-complete any uncompleted preceding milestones
+        // NOTE: Stage 3 (pm_baseline) is a manual baseline approval step and must NEVER be auto-completed
         if (item.eventType === 'complete' || item.eventType === 'start') {
           for (let pIdx = 0; pIdx < currentMsIndex; pIdx++) {
             const pm = updatedMsList[pIdx];
+            if (pm.key === 'pm_baseline' || pm.key === 'baseline_review') continue;
             if (!pm.actualEndDate || pm.status !== 'Completed') {
               const prevCompletedEnd = pIdx > 0
                 ? (updatedMsList[pIdx - 1].actualEndDate || updatedMsList[pIdx - 1].forecastEndDate || p.poDate || todayStr)
@@ -1477,7 +1587,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         }
-        if (item.eventType === 'complete') {
+        if (item.milestoneKey === 'corb_release' && item.eventType === 'complete') {
+          const { milestones: recalcedBOM } = calculateMilestonesFromBOM({
+            milestones: updatedMsList,
+            poDate: p.poDate || todayStr,
+            corbEndDate: item.eventDate,
+            deliveryDate: p.committedDeliveryDate,
+            materials: l.materials
+          });
+          updatedMsList = recalcedBOM.map(m => {
+            if (m.key === 'corb_release') {
+              return {
+                ...m,
+                actualEndDate: item.eventDate,
+                forecastEndDate: item.eventDate,
+                status: 'Completed' as MilestoneStatus,
+                completionPct: 100,
+                varianceDays: 0
+              };
+            }
+            return m;
+          });
+        } else if (item.eventType === 'complete') {
           updatedMsList = cascadeNextMilestoneStart(updatedMsList, currentMsIndex, item.eventDate, item.user);
         }
 
@@ -1495,7 +1626,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const syncedLine = applyMaterialProgress({ ...l, milestones: updatedMsList, materials: updatedMaterials });
         const tempLine = { ...syncedLine };
-        return recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+        const recalced = recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+        if (p.status === 'Baseline Pending') {
+          return {
+            ...recalced,
+            overallVarianceDays: 0,
+            milestones: recalced.milestones.map(m => {
+              if (m.key === 'corb_release') {
+                return { ...m, varianceDays: 0, delayReason: undefined, delayCategory: undefined, delayOwner: undefined };
+              }
+              if (!m.actualStartDate && !m.actualEndDate) {
+                return { ...m, varianceDays: 0, delayReason: undefined, delayCategory: undefined, delayOwner: undefined, status: 'Not Started' as MilestoneStatus };
+              }
+              return m;
+            })
+          };
+        }
+        return recalced;
       });
 
       const maxFinalForecast = updatedLines.reduce((latest, l) => {
@@ -1505,12 +1652,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return end && end > latest ? end : latest;
       }, '');
 
-      const poStatus = getPurchaseOrderStatus(updatedLines, p.isClosed);
+      const refreshed = withRefreshedStatus(p, updatedLines);
 
       return {
-        ...p,
-        status: poStatus,
-        productLines: updatedLines,
+        ...refreshed,
         revisedDeliveryDate: (maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate,
         lastUpdatedBy: itemsForPO[0]?.user || activeRole,
         lastUpdatedAt: new Date().toISOString()
@@ -1669,6 +1814,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               updatedMs.completionPct = 100;
               updatedMs.actualEndDate = effectiveDate;
               updatedMs.forecastEndDate = effectiveDate;
+              if (stageKey === 'corb_release') {
+                updatedMs.varianceDays = 0;
+              }
               // Preserve the recorded start, or derive one from the chain
               // anchor — never after the completion date, never in the future.
               if (!updatedMs.actualStartDate) {
@@ -1697,7 +1845,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // After completing a milestone, cascade the completion date to the next milestone
         if (statusAction === 'Completed') {
-          updatedMsList = cascadeNextMilestoneStart(updatedMsList, msIndex, effectiveDate, user);
+          if (stageKey === 'corb_release') {
+            const { milestones: recalcedBOM } = calculateMilestonesFromBOM({
+              milestones: updatedMsList,
+              poDate: p.poDate || todayStr,
+              corbEndDate: effectiveDate,
+              deliveryDate: p.committedDeliveryDate,
+              materials: line.materials
+            });
+            updatedMsList = recalcedBOM.map(m => {
+              if (m.key === 'corb_release') {
+                return {
+                  ...m,
+                  actualEndDate: effectiveDate,
+                  forecastEndDate: effectiveDate,
+                  status: 'Completed' as MilestoneStatus,
+                  completionPct: 100,
+                  varianceDays: 0
+                };
+              }
+              return m;
+            });
+          } else {
+            updatedMsList = cascadeNextMilestoneStart(updatedMsList, msIndex, effectiveDate, user);
+          }
         }
 
         // Material receipts drive raw_material / incoming_inspection state —
@@ -1707,6 +1878,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const tempLine = { ...workingLine };
         const recalculated = recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+        if (p.status === 'Baseline Pending') {
+          return {
+            ...recalculated,
+            overallVarianceDays: 0,
+            milestones: recalculated.milestones.map(m => {
+              if (m.key === 'corb_release') {
+                return { ...m, varianceDays: 0, delayReason: undefined, delayCategory: undefined, delayOwner: undefined };
+              }
+              if (!m.actualStartDate && !m.actualEndDate) {
+                return { ...m, varianceDays: 0, delayReason: undefined, delayCategory: undefined, delayOwner: undefined, status: 'Not Started' as MilestoneStatus };
+              }
+              return m;
+            })
+          };
+        }
         const recalculatedTarget = recalculated.milestones.find(ms => ms.key === stageKey);
         const hasCalculatedDelay = recalculatedTarget?.status === 'Delayed' || (recalculatedTarget?.varianceDays || 0) > 0;
 
@@ -1724,10 +1910,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return end && end > latest ? end : latest;
       }, '');
 
+      const refreshed = withRefreshedStatus(p, updatedLines);
       return {
-        ...p,
-        status: getPurchaseOrderStatus(updatedLines, p.isClosed),
-        productLines: updatedLines,
+        ...refreshed,
         revisedDeliveryDate: (maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate,
         lastUpdatedBy: user,
         lastUpdatedAt: new Date().toISOString()
@@ -1846,10 +2031,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
       });
 
+      const refreshed = withRefreshedStatus(p, updatedLines);
       return {
-        ...p,
-        status: getPurchaseOrderStatus(updatedLines, p.isClosed),
-        productLines: updatedLines,
+        ...refreshed,
         lastUpdatedBy: user,
         lastUpdatedAt: new Date().toISOString()
       };
@@ -1921,8 +2105,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const isInitialApproval = targetPO.status === 'Baseline Pending';
+    if (isInitialApproval) {
+      const corbIncomplete = targetPO.productLines.some(line => {
+        const corb = line.milestones.find(m => m.key === 'corb_release');
+        return !corb || (!corb.actualEndDate && corb.status !== 'Completed' && corb.completionPct !== 100);
+      });
+      if (corbIncomplete) {
+        return { success: false, error: 'Cannot approve master baseline: Stage 2 (CORB Release) must be completed across all product lines first.' };
+      }
+    }
     const flowAlreadyStarted = !isInitialApproval && targetPO.productLines.some(line =>
-      line.milestones.some(ms => ms.stageOrder > 2 && Boolean(ms.actualStartDate || ms.actualEndDate))
+      line.milestones.some(ms => ms.stageOrder > 3 && Boolean(ms.actualStartDate || ms.actualEndDate))
     );
     if (flowAlreadyStarted) {
       return { success: false, error: 'Baseline is locked after flow start. Continue updating milestones without changing the approved plan.' };
@@ -2031,49 +2224,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           const tempLine = { ...line, milestones: updatedMsList };
-          return recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+          const recalced = recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+          if (isInitialApproval) {
+            return {
+              ...recalced,
+              overallVarianceDays: 0,
+              status: 'In Progress' as MilestoneStatus,
+              milestones: recalced.milestones.map(m => ({
+                ...m,
+                varianceDays: 0,
+                delayReason: undefined,
+                delayCategory: undefined,
+                delayOwner: undefined
+              }))
+            };
+          }
+          return recalced;
         }
 
         if (lineChanges.length === 0 && !baselineStartDate && !isInitialApproval) return line;
 
-        const changedMsList = line.milestones.map(ms => {
-          const change = lineChanges.find(c => c.milestoneKey === ms.key);
-          if (!change) return ms;
-
-          const oldDur = ms.committedDurationDays;
-          const newDur = change.newDuration;
-          const oldEnd = ms.committedBaselineEndDate;
-          const newEnd = addDays(ms.committedBaselineStartDate, newDur - 1);
-
-          revisionChangeDetails.push({
-            lineId: line.id,
-            milestoneKey: ms.key,
-            oldDuration: oldDur,
-            newDuration: newDur,
-            oldBaselineEnd: oldEnd,
-            newBaselineEnd: newEnd
-          });
-
-          return {
-            ...ms,
-            committedDurationDays: newDur,
-            committedBaselineEndDate: newEnd
-          };
+        const corbMs = line.milestones.find(m => m.key === 'corb_release');
+        const corbEndDateVal = corbMs?.actualEndDate || corbMs?.committedBaselineEndDate || targetPO.poDate || todayStr;
+        const customDurationsMap: Record<string, number> = {};
+        lineChanges.forEach(c => {
+          customDurationsMap[c.milestoneKey] = c.newDuration;
         });
 
-        let runningDate = baselineStartDate || changedMsList[0]?.committedBaselineStartDate || todayStr;
-        let updatedMsList = changedMsList.map(ms => {
-          const startDate = runningDate;
-          const endDate = addDays(startDate, ms.committedDurationDays - 1);
-          runningDate = addDays(endDate, 1);
-          return {
-            ...ms,
-            committedBaselineStartDate: startDate,
-            committedBaselineEndDate: endDate
-          };
+        // Calculate baseline schedule starting from BOM Release as per last date (complete) of CORB,
+        // and calculated with contractual delivery date
+        const { milestones: updatedMsListRaw } = calculateMilestonesFromBOM({
+          milestones: line.milestones,
+          poDate: targetPO.poDate || todayStr,
+          corbEndDate: baselineStartDate || corbEndDateVal,
+          deliveryDate: targetPO.committedDeliveryDate,
+          materials: line.materials,
+          customDurations: Object.keys(customDurationsMap).length > 0 ? customDurationsMap : undefined
         });
 
-        // Upon initial PM baseline approval, mark Stage 2 (pm_baseline) as completed and cascade to Stage 3 for ALL product lines
+        let updatedMsList = updatedMsListRaw;
+
+        updatedMsList.forEach(newMs => {
+          const oldMs = line.milestones.find(m => m.key === newMs.key);
+          if (oldMs && (oldMs.committedDurationDays !== newMs.committedDurationDays || oldMs.committedBaselineEndDate !== newMs.committedBaselineEndDate)) {
+            revisionChangeDetails.push({
+              lineId: line.id,
+              milestoneKey: newMs.key,
+              oldDuration: oldMs.committedDurationDays,
+              newDuration: newMs.committedDurationDays,
+              oldBaselineEnd: oldMs.committedBaselineEndDate,
+              newBaselineEnd: newMs.committedBaselineEndDate
+            });
+          }
+        });
+
+        // Upon initial PM baseline approval, mark Stage 3 (pm_baseline) as completed and cascade to Stage 4 for ALL product lines
         if (targetPO.status === 'Baseline Pending' || isInitialApproval) {
           const poIdx = updatedMsList.findIndex(m => m.key === 'po_from_customer');
           if (poIdx >= 0) {
@@ -2089,9 +2294,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const pmIdx = updatedMsList.findIndex(m => m.key === 'pm_baseline' || m.key === 'baseline_review');
           if (pmIdx >= 0) {
-            const pmStart = updatedMsList[pmIdx].actualStartDate || updatedMsList[pmIdx].committedBaselineStartDate || todayStr;
+            const pmStart = updatedMsList[pmIdx].actualStartDate || updatedMsList[pmIdx].committedBaselineStartDate || corbEndDateVal;
             const pmEnd = isInitialApproval
-              ? (updatedMsList[pmIdx].committedBaselineEndDate || todayStr)
+              ? (updatedMsList[pmIdx].committedBaselineEndDate || corbEndDateVal)
               : (todayStr > updatedMsList[pmIdx].committedBaselineEndDate ? todayStr : updatedMsList[pmIdx].committedBaselineEndDate);
             updatedMsList[pmIdx] = {
               ...updatedMsList[pmIdx],
@@ -2108,7 +2313,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         const tempLine = { ...line, milestones: updatedMsList };
-        return recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+        const recalced = recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+        if (isInitialApproval) {
+          return {
+            ...recalced,
+            overallVarianceDays: 0,
+            status: 'In Progress' as MilestoneStatus,
+            milestones: recalced.milestones.map(m => ({
+              ...m,
+              varianceDays: 0,
+              delayReason: undefined,
+              delayCategory: undefined,
+              delayOwner: undefined
+            }))
+          };
+        }
+        return recalced;
       });
 
       const newRev = {
@@ -2191,10 +2411,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createPurchaseOrder = (newPoData: Partial<PurchaseOrder>): { success: boolean; poId?: string; error?: string } => {
-    const perms = ROLE_PERMISSIONS[activeRole];
-    if (activeRole !== 'Project Management' && !perms?.canCreatePO) {
-      return { success: false, error: 'Unauthorized: You do not have permission to create purchase orders.' };
-    }
     const id = `po-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const poNumber = (newPoData.poNumber || '').trim();
     if (!poNumber) {
@@ -2296,6 +2512,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             docRef: newPoData.contractReviewRef || 'PO-AUTO-INTAKE'
           };
         }
+        if (m.key === 'corb_release') {
+          return {
+            ...m,
+            committedBaselineStartDate: '',
+            committedBaselineEndDate: '',
+            committedDurationDays: 0,
+            actualStartDate: undefined,
+            actualEndDate: undefined,
+            forecastStartDate: '',
+            forecastEndDate: '',
+            status: 'Not Started' as MilestoneStatus,
+            completionPct: 0
+          };
+        }
         return m;
       });
 
@@ -2314,7 +2544,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'In Progress' as MilestoneStatus
       };
 
-      return recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+      const recalced = recalculateProductLine(tempLine, todayStr, config.atRiskThresholdDays, config.delayedThresholdDays);
+      return {
+        ...recalced,
+        overallVarianceDays: 0,
+        status: 'In Progress' as MilestoneStatus,
+        milestones: recalced.milestones.map((m, mIdx) => ({
+          ...m,
+          varianceDays: 0,
+          delayReason: undefined,
+          delayCategory: undefined,
+          delayOwner: undefined,
+          status: (m.key === 'po_from_customer' || m.stageOrder === 1 || mIdx === 0) ? ('Completed' as MilestoneStatus) : ('Not Started' as MilestoneStatus),
+          actualEndDate: (m.key === 'po_from_customer' || m.stageOrder === 1 || mIdx === 0) ? m.actualEndDate : (m.key === 'corb_release' ? undefined : m.actualEndDate)
+        }))
+      };
     });
 
     const productLines = masterProductLines;

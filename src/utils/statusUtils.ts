@@ -182,8 +182,9 @@ export function getPOManufacturingStatus(po: PurchaseOrder): POStatusSummary {
     ? activeMilestone.varianceDays
     : 0;
 
-  // Active delay flag for ongoing work
-  const isDelayed = !isOrderFinished && (totalCalculatedDelay > 0 || activeMilestoneVariance > 0);
+  // Active delay flag for ongoing work (Baseline Pending orders are awaiting baseline sign-off and cannot have delay)
+  const isBaselinePending = po.status === 'Baseline Pending' && !isOrderFinished;
+  const isDelayed = !isOrderFinished && !isBaselinePending && (totalCalculatedDelay > 0 || activeMilestoneVariance > 0);
 
   // Delayed stage name matches the actual stage where the delay originated
   // Net delay days: preserved on finished/closed orders as well as active delayed orders
@@ -217,7 +218,7 @@ export function getPOManufacturingStatus(po: PurchaseOrder): POStatusSummary {
       ? `Order closed & delivered to client with +${delayDays}d delay — Final Rev ${lastRevNum} archived.`
       : `Order closed & delivered to client on schedule — Final Rev ${lastRevNum} archived.`;
   } else if (po.status === 'Baseline Pending') {
-    timelineValidationStatus = 'REQUIRES_REVISION_DELAYED';
+    timelineValidationStatus = 'VALIDATED_OK';
     timelineMessage = `Baseline approval pending — Awaiting PM baseline sign-off before manufacturing kickoff.`;
   } else if (isDelayed) {
     timelineValidationStatus = 'REQUIRES_REVISION_DELAYED';
@@ -255,9 +256,9 @@ export function getPOManufacturingStatus(po: PurchaseOrder): POStatusSummary {
 export function getStageFriendlyName(key: string, _line?: any): string {
   switch (key) {
     case 'po_from_customer': return '1. Customer Purchase Order (PO)';
+    case 'corb_release': return '2. CORB Release';
     case 'pm_baseline':
-    case 'baseline_review': return '2. Baseline Review & Planning';
-    case 'corb_release': return '3. CORB Release';
+    case 'baseline_review': return '3. Baseline Review & Planning';
     case 'bom_release': return '4. BOM Release';
     case 'wo_release': return '5. Work Order (WO) Release';
     case 'sub_supplier_po': return '6. Sub-Supplier PO';
