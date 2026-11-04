@@ -789,7 +789,7 @@ def save_products_to_db(conn: pymysql.connections.Connection, org_id: str, produ
 def load_products_from_db(conn: pymysql.connections.Connection, org_id: str) -> list[dict]:
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT * FROM product_catalog WHERE organization_id = %s OR organization_id = 'circor-flow-technologies' ORDER BY product_name ASC",
+            "SELECT * FROM product_catalog WHERE organization_id = %s OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY product_name ASC",
             (org_id,),
         )
         rows = cursor.fetchall()
@@ -879,7 +879,7 @@ def save_templates_to_db(conn: pymysql.connections.Connection, org_id: str, temp
 def load_templates_from_db(conn: pymysql.connections.Connection, org_id: str) -> list[dict]:
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT * FROM category_templates WHERE organization_id = %s OR organization_id = 'circor-flow-technologies' ORDER BY category_name ASC",
+            "SELECT * FROM category_templates WHERE organization_id = %s OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY category_name ASC",
             (org_id,),
         )
         rows = cursor.fetchall()
@@ -951,7 +951,7 @@ def save_audit_logs_to_db(conn: pymysql.connections.Connection, org_id: str, log
 def load_audit_logs_from_db(conn: pymysql.connections.Connection, org_id: str) -> list[dict]:
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT * FROM audit_logs WHERE organization_id = %s OR organization_id = 'circor-flow-technologies' ORDER BY created_at DESC LIMIT 500",
+            "SELECT * FROM audit_logs WHERE organization_id = %s OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY created_at DESC LIMIT 500",
             (org_id,),
         )
         rows = cursor.fetchall()
@@ -1021,7 +1021,7 @@ def save_rectifications_to_db(conn: pymysql.connections.Connection, org_id: str,
 def load_rectifications_from_db(conn: pymysql.connections.Connection, org_id: str) -> list[dict]:
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT * FROM rectification_actions WHERE organization_id = %s OR organization_id = 'circor-flow-technologies' ORDER BY suggested_at DESC",
+            "SELECT * FROM rectification_actions WHERE organization_id = %s OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY suggested_at DESC",
             (org_id,),
         )
         rows = cursor.fetchall()
@@ -1133,7 +1133,7 @@ def save_cancellations_to_db(conn: pymysql.connections.Connection, org_id: str, 
 def load_cancellations_from_db(conn: pymysql.connections.Connection, org_id: str) -> list[dict]:
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT * FROM cancellation_requests WHERE organization_id = %s OR organization_id = 'circor-flow-technologies' ORDER BY requested_at DESC",
+            "SELECT * FROM cancellation_requests WHERE organization_id = %s OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY requested_at DESC",
             (org_id,),
         )
         rows = cursor.fetchall()

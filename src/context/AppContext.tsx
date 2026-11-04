@@ -1381,7 +1381,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? chainedEarliest
         : (ms.forecastStartDate || baselineStart || chainedEarliest || '');
 
-      if (item.milestoneKey === 'corb_release') {
+      if (item.milestoneKey === 'corb_release' || ms.key === 'corb_release' || ms.stageOrder === 2) {
         // Stage 2 (CORB Release) has no planned baseline dates and is strictly a gate capturing
         // the completion date that anchors subsequent BOM baseline planning. It never incurs delay variance.
         isNewDelayCausedByStage = false;

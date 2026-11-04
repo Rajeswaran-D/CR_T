@@ -665,7 +665,7 @@ export async function loadOrdersFromDb(pool: Pool, orgId: string): Promise<Purch
   const conn = await pool.getConnection();
   try {
     const [poRows] = await conn.query<any[]>(
-      `SELECT * FROM purchase_orders WHERE organization_id = ? ORDER BY po_date DESC`,
+      `SELECT * FROM purchase_orders WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY po_date DESC`,
       [orgId]
     );
 
@@ -958,7 +958,7 @@ export async function loadProductsFromDb(pool: Pool, orgId: string): Promise<Pro
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query<any[]>(
-      `SELECT * FROM product_catalog WHERE organization_id = ? ORDER BY product_name ASC`,
+      `SELECT * FROM product_catalog WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY product_name ASC`,
       [orgId]
     );
 
@@ -1038,7 +1038,7 @@ export async function loadAuditLogsFromDb(pool: Pool, orgId: string): Promise<Au
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query<any[]>(
-      `SELECT * FROM audit_logs WHERE organization_id = ? ORDER BY created_at DESC LIMIT 500`,
+      `SELECT * FROM audit_logs WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY created_at DESC LIMIT 500`,
       [orgId]
     );
 
@@ -1142,7 +1142,7 @@ export async function loadRectificationsFromDb(pool: Pool, orgId: string): Promi
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query<any[]>(
-      `SELECT * FROM rectification_actions WHERE organization_id = ? ORDER BY suggested_at DESC`,
+      `SELECT * FROM rectification_actions WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY suggested_at DESC`,
       [orgId]
     );
 
@@ -1313,7 +1313,7 @@ export async function loadCancellationsFromDb(pool: Pool, orgId: string): Promis
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query<any[]>(
-      `SELECT * FROM cancellation_requests WHERE organization_id = ? ORDER BY requested_at DESC`,
+      `SELECT * FROM cancellation_requests WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies' ORDER BY requested_at DESC`,
       [orgId]
     );
     const out = rows.map(r => ({
@@ -1402,7 +1402,7 @@ export async function loadTemplatesFromDb(pool: Pool, orgId: string): Promise<Ca
   const conn = await pool.getConnection();
   try {
     const [tRows] = await conn.query<any[]>(
-      `SELECT * FROM category_templates WHERE organization_id = ?`,
+      `SELECT * FROM category_templates WHERE organization_id = ? OR organization_id = 'local-development' OR organization_id = 'circor-flow-technologies'`,
       [orgId]
     );
 
