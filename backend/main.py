@@ -35,7 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import (
     DEFAULT_ORG_ID, PORT, is_db_configured, missing_db_vars,
     MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_CONNECTION_LIMIT,
-    ENABLE_SCHEMA_ADMIN,
+    ENABLE_SCHEMA_ADMIN, get_allowed_origins,
 )
 from .db import (
     get_connection, is_db_connected, ping_db, get_memory_state, update_memory_state,
@@ -56,6 +56,8 @@ from .mysql_adapter import (
 from .security import (
     validate_org, validate_schema_admin, check_rate_limit,
     validate_order_body, validate_config_body, is_allowed_origin,
+    validate_product_body, validate_audit_body, validate_cancellation_body,
+    validate_template_body, mask_host, sanitize_text, is_safe_id_string,
 )
 
 LOG_FILE = Path(__file__).parent.parent / "backend.log"
@@ -172,12 +174,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CFT Project E2E Tracker API", version="2.0.0", lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
-# CORS Middleware — allow all localhost + configured origins
+# CORS Middleware — restricted to configured origins and loopback dev
 # ---------------------------------------------------------------------------
+
+allowed_origins_list = get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],         # We validate origin manually below too
+    allow_origins=allowed_origins_list,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-Organization-Id", "Authorization", "ngrok-skip-browser-warning"],
@@ -186,22 +191,50 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Security headers + rate limiting middleware
+# Security headers + payload size limit + rate limiting middleware
 # ---------------------------------------------------------------------------
+
+MAX_REQUEST_BODY_BYTES = 25 * 1024 * 1024  # 25 MB
+
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
-    # Rate limit
+    # Enforce request body size limits to prevent Denial of Service (DoS / OOM)
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > MAX_REQUEST_BODY_BYTES:
+                return JSONResponse(status_code=413, content={"detail": "Payload too large (maximum 25MB)."})
+        except (ValueError, TypeError):
+            pass
+
+    # Rate limit per validated client IP
     rate_resp = check_rate_limit(request)
     if rate_resp:
         return rate_resp
 
     response: Response = await call_next(request)
+
+    # Comprehensive HTTP Security Headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' http://localhost:* http://127.0.0.1:* https://circor-tracker-api.onrender.com https://*.onrender.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
     return response
 
 
@@ -286,7 +319,7 @@ async def health():
         "storageProvider": "mysql" if db_connected else ("unavailable" if configured else "memory-with-file-sync"),
         "uptime": time.time() - _start_time,
         "db": {
-            "host": MYSQL_HOST,
+            "host": mask_host(MYSQL_HOST),
             "port": MYSQL_PORT,
             "database": MYSQL_DATABASE,
             "connectionLimit": MYSQL_CONNECTION_LIMIT,
@@ -367,6 +400,8 @@ async def get_order(
     x_organization_id: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
 ):
+    if not is_safe_id_string(order_id):
+        raise HTTPException(status_code=400, detail="Invalid order identifier format.")
     org_id = _get_org_id(x_organization_id, authorization)
     if is_order_tombstoned(order_id):
         raise HTTPException(status_code=404, detail="Order not found")
@@ -428,8 +463,12 @@ async def update_order(
     x_organization_id: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
 ):
+    if not is_safe_id_string(order_id):
+        raise HTTPException(status_code=400, detail="Invalid order identifier format.")
     org_id = _get_org_id(x_organization_id, authorization)
     order_update = await request.json()
+    if not isinstance(order_update, dict):
+        raise HTTPException(status_code=400, detail="Request body must be a JSON object.")
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -473,6 +512,8 @@ async def delete_order(
     x_organization_id: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
 ):
+    if not is_safe_id_string(order_id):
+        raise HTTPException(status_code=400, detail="Invalid order identifier format.")
     org_id = _get_org_id(x_organization_id, authorization)
     tombstone_order(order_id)
 
@@ -534,6 +575,9 @@ async def create_product(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     prod = await request.json()
+    validated, err = validate_product_body(prod)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -589,6 +633,9 @@ async def create_audit_log(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     entry = await request.json()
+    validated, err = validate_audit_body(entry)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -661,6 +708,9 @@ async def create_template(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     tmpl = await request.json()
+    validated, err = validate_template_body(tmpl)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -764,6 +814,9 @@ async def create_cancellation(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     cancellation = await request.json()
+    validated, err = validate_cancellation_body(cancellation)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -821,7 +874,7 @@ async def db_status():
         "stateKeysCount": len(mem),
         "ordersCount": len(mem.get("cft_pos") or []) if isinstance(mem.get("cft_pos"), list) else 0,
         "db": {
-            "host": MYSQL_HOST,
+            "host": mask_host(MYSQL_HOST),
             "port": MYSQL_PORT,
             "database": MYSQL_DATABASE,
             "connectionLimit": MYSQL_CONNECTION_LIMIT,
@@ -879,20 +932,24 @@ async def init_db_schema(
 
 
 @app.get("/api/logs")
-async def get_server_logs(limit: int = 150):
-    """Retrieve recent backend execution and request logs."""
+async def get_server_logs(
+    limit: int = 150,
+    authorization: Optional[str] = Header(None),
+):
+    """Retrieve recent backend execution and request logs (Admin Protected)."""
+    validate_schema_admin(authorization)
     if not LOG_FILE.exists():
-        return {"file": str(LOG_FILE), "total_lines": 0, "logs": []}
+        return {"file": "backend.log", "total_lines": 0, "logs": []}
     try:
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             lines = [line.rstrip() for line in f.readlines()]
         return {
-            "file": str(LOG_FILE),
+            "file": "backend.log",
             "total_lines": len(lines),
             "logs": lines[-limit:]
         }
     except Exception as e:
-        return {"file": str(LOG_FILE), "error": str(e), "logs": []}
+        return {"file": "backend.log", "error": "Unable to read logs", "logs": []}
 
 
 # ===========================================================================
@@ -907,9 +964,17 @@ if dist_path.exists():
     async def serve_frontend(full_path: str):
         if full_path.startswith("api"):
             raise HTTPException(status_code=404, detail="API route not found")
-        file_path = dist_path / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
+        # Security: Prevent Path Traversal attacks
+        safe_rel_path = Path(full_path).as_posix().lstrip("/\\")
+        try:
+            target_file = (dist_path / safe_rel_path).resolve()
+            if not target_file.is_relative_to(dist_path.resolve()):
+                raise HTTPException(status_code=403, detail="Forbidden")
+        except (ValueError, RuntimeError):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        if target_file.exists() and target_file.is_file():
+            return FileResponse(str(target_file))
         return FileResponse(str(dist_path / "index.html"))
 
 

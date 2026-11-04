@@ -105,11 +105,25 @@ def is_allowed_origin(origin: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Rate limiter (simple in-memory, per IP)
+# Rate limiter (in-memory, per validated client IP)
 # ---------------------------------------------------------------------------
 
 _rate_buckets: dict[str, dict] = defaultdict(lambda: {"count": 0, "reset_at": 0.0})
 RATE_WINDOW_SECS = 60.0
+IP_PATTERN = re.compile(r"^[0-9a-fA-F:.]+$")
+
+
+def _get_client_ip(request: Request) -> str:
+    """Safely extracts and validates client IP, avoiding header spoofing."""
+    client_host = request.client.host if request.client else "unknown"
+    # Only honor X-Forwarded-For if client_host is a loopback or local proxy
+    if client_host in ("127.0.0.1", "::1", "localhost", "testclient"):
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            first_ip = xff.split(",")[0].strip()
+            if IP_PATTERN.match(first_ip):
+                return first_ip
+    return client_host if IP_PATTERN.match(client_host) else "unknown"
 
 
 def check_rate_limit(request: Request) -> Optional[JSONResponse]:
@@ -118,15 +132,11 @@ def check_rate_limit(request: Request) -> Optional[JSONResponse]:
         return None
 
     now = time.time()
-    # Clean up if too large
+    # Bound memory
     if len(_rate_buckets) > 10_000:
         _rate_buckets.clear()
 
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        ip = xff.split(",")[0].strip()
-    else:
-        ip = request.client.host if request.client else "unknown"
+    ip = _get_client_ip(request)
 
     bucket = _rate_buckets[ip]
     if now >= bucket["reset_at"]:
@@ -162,10 +172,14 @@ def validate_schema_admin(authorization: Optional[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Request body validation
+# Request body validation & Anti-XSS Sanitization
 # ---------------------------------------------------------------------------
 
-CONTROL_CHARS = re.compile(r"[\u0000-\u001f\u007f]")
+CONTROL_CHARS = re.compile(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]")
+DANGEROUS_HTML_PATTERN = re.compile(
+    r"(?i)<\s*(script|iframe|embed|object|meta|link|style)[^>]*>|javascript:|data:text/html|on\w+\s*=",
+    re.IGNORECASE
+)
 
 
 def is_safe_id_string(value: object, max_len: int = 128) -> bool:
@@ -174,7 +188,17 @@ def is_safe_id_string(value: object, max_len: int = 128) -> bool:
         and value.strip()
         and len(value) <= max_len
         and not CONTROL_CHARS.search(value)
+        and not DANGEROUS_HTML_PATTERN.search(value)
     )
+
+
+def sanitize_text(val: object, max_len: int = 2000) -> str:
+    """Strips control chars and dangerous executable tags from user text."""
+    if not isinstance(val, str):
+        return ""
+    clean = CONTROL_CHARS.sub("", val)
+    clean = DANGEROUS_HTML_PATTERN.sub("", clean)
+    return clean[:max_len].strip()
 
 
 def validate_order_body(body: dict) -> Optional[str]:
@@ -184,7 +208,59 @@ def validate_order_body(body: dict) -> Optional[str]:
         return "Missing or invalid field: id."
     if not is_safe_id_string(body.get("poNumber")):
         return "Missing or invalid field: poNumber."
+    cust = body.get("customerName")
+    if cust and isinstance(cust, str) and DANGEROUS_HTML_PATTERN.search(cust):
+        return "Disallowed script/HTML tokens in customerName."
     return None
+
+
+def validate_product_body(body: dict) -> tuple[Optional[dict], Optional[str]]:
+    if not isinstance(body, dict):
+        return None, "Request body must be a JSON object."
+    if not is_safe_id_string(body.get("id")):
+        return None, "Missing or invalid field: id."
+    name = body.get("productName") or body.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 255:
+        return None, "Missing or invalid product name."
+    if DANGEROUS_HTML_PATTERN.search(name):
+        return None, "Disallowed script/HTML tokens in product name."
+    return body, None
+
+
+def validate_audit_body(body: dict) -> tuple[Optional[dict], Optional[str]]:
+    if not isinstance(body, dict):
+        return None, "Request body must be a JSON object."
+    if not is_safe_id_string(body.get("id")):
+        return None, "Missing or invalid field: id."
+    return body, None
+
+
+def validate_cancellation_body(body: dict) -> tuple[Optional[dict], Optional[str]]:
+    if not isinstance(body, dict):
+        return None, "Request body must be a JSON object."
+    if not is_safe_id_string(body.get("id")):
+        return None, "Missing or invalid field: id."
+    if not is_safe_id_string(body.get("poId")) and not is_safe_id_string(body.get("poNumber")):
+        return None, "Missing or invalid field: poId or poNumber."
+    return body, None
+
+
+def validate_template_body(body: dict) -> tuple[Optional[dict], Optional[str]]:
+    if not isinstance(body, dict):
+        return None, "Request body must be a JSON object."
+    if not is_safe_id_string(body.get("id")):
+        return None, "Missing or invalid field: id."
+    return body, None
+
+
+def mask_host(host: str) -> str:
+    """Masks internal hostnames or IPs to prevent infrastructure enumeration."""
+    if not host or host in ("localhost", "127.0.0.1", "::1"):
+        return host
+    parts = host.split(".")
+    if len(parts) > 2:
+        return f"{parts[0]}.***.{parts[-1]}"
+    return f"{host[:3]}***"
 
 
 def validate_config_body(body: dict) -> tuple[Optional[dict], Optional[str]]:

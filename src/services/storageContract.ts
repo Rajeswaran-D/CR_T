@@ -21,17 +21,39 @@ export type StorageKey = (typeof STORAGE_KEYS)[number];
 
 /**
  * Validates a backend base URL override.
- * Allowed: relative paths starting with '/' (e.g. '/api') or absolute
- * http(s) URLs. Anything else (javascript:, data:, empty fragments, …) is
- * rejected so a crafted link can never silently redirect data requests.
+ * Allowed: relative paths starting with '/' (e.g. '/api') or approved
+ * development/corporate domains. Arbitrary third-party domains are rejected
+ * to prevent phishing / data exfiltration via crafted URL parameters.
  */
 export function isValidBackendBaseUrl(value: string): boolean {
   const v = (value || '').trim();
   if (!v) return false;
-  if (v.startsWith('/')) return true;
+  // Relative paths are always safe (same origin)
+  if (v.startsWith('/') && !v.startsWith('//')) return true;
   try {
     const u = new URL(v);
-    return u.protocol === 'http:' || u.protocol === 'https:';
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+
+    const host = u.hostname.toLowerCase();
+    // Local development loopback
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+
+    // Same host as current window
+    if (typeof window !== 'undefined' && window.location && window.location.hostname.toLowerCase() === host) {
+      return true;
+    }
+
+    // Approved deployment hosts
+    if (
+      host === 'circor-tracker-api.onrender.com' ||
+      host.endsWith('.onrender.com') ||
+      host === 'circor-tracker.vercel.app' ||
+      host.endsWith('.vercel.app')
+    ) {
+      return true;
+    }
+
+    return false;
   } catch {
     return false;
   }

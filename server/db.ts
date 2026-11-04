@@ -111,11 +111,18 @@ function buildDbConfig(): DbConfig {
   return cfg;
 }
 
+function maskHost(host: string): string {
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1') return host;
+  const parts = host.split('.');
+  if (parts.length > 2) return `${parts[0]}.***.${parts[parts.length - 1]}`;
+  return `${host.slice(0, 3)}***`;
+}
+
 // Safe diagnostics without secret values or passwords — used by health/status endpoints.
 export function getSafeDbConfig(): SafeDbConfig {
   const cfg = buildDbConfig();
   return {
-    host: cfg.host,
+    host: maskHost(cfg.host),
     port: cfg.port,
     database: cfg.database,
     connectionLimit: cfg.connectionLimit,

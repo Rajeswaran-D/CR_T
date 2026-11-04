@@ -206,11 +206,24 @@ export function rateLimiter(req: Request, res: Response, next: NextFunction): vo
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
-  // The approved frontend is a different origin (Vercel -> Render), so this
-  // API must allow cross-origin subresource loads; it does not weaken CORS.
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com data:; " +
+    "img-src 'self' data: blob:; " +
+    "connect-src 'self' http://localhost:* http://127.0.0.1:* https://circor-tracker-api.onrender.com https://*.onrender.com; " +
+    "frame-ancestors 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self';"
+  );
   next();
 }
 
@@ -306,4 +319,45 @@ export function validateConfigBody(body: unknown): Record<string, unknown> | str
     out.enablePushNotifications = b.enablePushNotifications;
   }
   return out;
+}
+
+export const DANGEROUS_HTML_PATTERN = /<\s*(script|iframe|embed|object|meta|link|style)[^>]*>|javascript:|data:text\/html|on\w+\s*=/i;
+
+export function maskHost(host: string): string {
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1') return host;
+  const parts = host.split('.');
+  if (parts.length > 2) return `${parts[0]}.***.${parts[parts.length - 1]}`;
+  return `${host.slice(0, 3)}***`;
+}
+
+export function validateProductBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Request body must be a JSON object.';
+  const b = body as Record<string, unknown>;
+  if (!isSafeIdString(b.id)) return 'Missing or invalid field: id.';
+  const name = typeof b.productName === 'string' ? b.productName : (typeof b.name === 'string' ? b.name : '');
+  if (!name || name.length > 255) return 'Missing or invalid product name.';
+  if (DANGEROUS_HTML_PATTERN.test(name)) return 'Disallowed script/HTML tokens in product name.';
+  return null;
+}
+
+export function validateAuditBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Request body must be a JSON object.';
+  const b = body as Record<string, unknown>;
+  if (!isSafeIdString(b.id)) return 'Missing or invalid field: id.';
+  return null;
+}
+
+export function validateCancellationBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Request body must be a JSON object.';
+  const b = body as Record<string, unknown>;
+  if (!isSafeIdString(b.id)) return 'Missing or invalid field: id.';
+  if (!isSafeIdString(b.poId) && !isSafeIdString(b.poNumber)) return 'Missing or invalid field: poId or poNumber.';
+  return null;
+}
+
+export function validateTemplateBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Request body must be a JSON object.';
+  const b = body as Record<string, unknown>;
+  if (!isSafeIdString(b.id)) return 'Missing or invalid field: id.';
+  return null;
 }

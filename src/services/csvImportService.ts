@@ -201,6 +201,20 @@ export interface ImportPreviewResult {
 }
 
 /**
+ * Neutralizes potential CSV / Spreadsheet Formula Injection (DDE / CSV Injection).
+ * If a cell string starts with dangerous formula symbols (=, +, @, \t, \r, or - for non-numbers),
+ * it is prefixed with a single quote to ensure spreadsheet apps treat it as literal text.
+ */
+export function sanitizeCellText(val: string): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (/^[=\+@\t\r]/.test(trimmed) || (/^-/.test(trimmed) && isNaN(Number(trimmed)))) {
+    return "'" + trimmed;
+  }
+  return val;
+}
+
+/**
  * Normalizes loose date input formats (YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, DD-Mon-YYYY)
  * into strict ISO calendar string 'YYYY-MM-DD'.
  *
@@ -1344,7 +1358,10 @@ export function parseAndValidateCsv(
     // Rows can be shorter than the header (trailing empty cells are omitted by many
     // exporters). Reading past the end must yield '' rather than throwing a TypeError
     // that aborts the whole import with a generic alert.
-    const cellAt = (idx: number): string => (idx >= 0 && idx < row.length && row[idx] != null ? String(row[idx]) : '');
+    const cellAt = (idx: number): string => {
+      const raw = idx >= 0 && idx < row.length && row[idx] != null ? String(row[idx]) : '';
+      return sanitizeCellText(raw);
+    };
 
     const poNumber = cellAt(poNumIdx).trim();
     const customerName = cellAt(custNameIdx).trim();
