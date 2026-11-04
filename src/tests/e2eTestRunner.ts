@@ -2378,6 +2378,51 @@ console.log('\n📋 GROUP 23: Stage 2 (CORB Release) Delay Immunity & Anchor Rec
   assert(!recalcedBOM.some(m => m.varianceDays > 0), 'All downstream stages have strictly 0 delay variance upon CORB completion');
 }
 
+// ----------------------------------------------------------------------------
+// TEST GROUP 24: Early Stage Completion & Benchmark Target Date Preservation
+// ----------------------------------------------------------------------------
+console.log('\n📋 GROUP 24: Early Stage Completion & Benchmark Target Date Preservation');
+
+{
+  // Test 1: Completing Material Receipt on the 2nd when planned on the 3rd preserves revisedEnd as the 3rd
+  const materialReceiptMs: Milestone = {
+    id: 'ms-mat-receipt-early-test',
+    key: 'material_receipt',
+    name: '7. Material Incoming Receipt',
+    stageOrder: 7,
+    defaultDurationDays: 14,
+    committedBaselineStartDate: '2026-10-21',
+    committedBaselineEndDate: '2026-11-03',
+    committedDurationDays: 14,
+    forecastStartDate: '2026-10-21',
+    forecastEndDate: '2026-11-03',
+    actualStartDate: '2026-10-21',
+    actualEndDate: '2026-11-02', // User completed 1 day early on 2nd
+    status: 'Completed',
+    completionPct: 100,
+    varianceDays: 0
+  };
+
+  const dates = getMilestoneRevisedDates(materialReceiptMs, null, '2026-10-20', '2026-12-30');
+  assert(dates.baselineEnd === '2026-11-03', `Baseline target end is 2026-11-03 (got ${dates.baselineEnd})`);
+  assert(dates.revisedEnd === '2026-11-03', `Revised target end PRESERVES 2026-11-03 and is NOT overwritten by actual completion 2026-11-02 (got ${dates.revisedEnd})`);
+  assert(materialReceiptMs.actualEndDate === '2026-11-02', `Actual completion date is 2026-11-02 (got ${materialReceiptMs.actualEndDate})`);
+
+  const daysEarly = getDaysDifference(materialReceiptMs.actualEndDate!, dates.revisedEnd);
+  assert(daysEarly === 1, `1 day resolved / completed ahead of planned target (got ${daysEarly}d)`);
+  assert(dates.shiftDays === 0, `No delay shift on early completion (got ${dates.shiftDays})`);
+
+  // Test 2: Delayed completion properly reflects late completion date
+  const delayedMatMs: Milestone = {
+    ...materialReceiptMs,
+    actualEndDate: '2026-11-05', // 2 days late
+    varianceDays: 2
+  };
+  const delayedDates = getMilestoneRevisedDates(delayedMatMs, null, '2026-10-20', '2026-12-30');
+  assert(delayedDates.revisedEnd === '2026-11-05', `Delayed revisedEnd reflects delayed completion 2026-11-05 (got ${delayedDates.revisedEnd})`);
+  assert(delayedDates.shiftDays === 2, `Shift days is 2d on late completion (got ${delayedDates.shiftDays})`);
+}
+
 console.log('\n================================================================');
 const successRate = totalTests === 0 ? 0 : Math.round((passedTests / totalTests) * 100);
 console.log(`${passedTests === totalTests ? '🎉' : '⚠️'} TEST SUMMARY: ${passedTests}/${totalTests} TESTS PASSED (${successRate}% SUCCESS RATE)`);

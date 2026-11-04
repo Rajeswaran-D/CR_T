@@ -174,12 +174,13 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
         totalDelay = inheritedDelayDays + newDelayFormed;
       } else if (eventDate && crossingLine && eventDate <= crossingLine) {
         newDelayFormed = 0;
+        const daysEarly = getDaysDifference(eventDate, crossingLine);
         if (baselineEnd && eventDate > baselineEnd) {
           totalDelay = getDaysDifference(baselineEnd, eventDate);
           resolvedDelayDays = Math.max(0, inheritedDelayDays - totalDelay);
         } else {
           totalDelay = 0;
-          resolvedDelayDays = inheritedDelayDays;
+          resolvedDelayDays = Math.max(inheritedDelayDays, daysEarly);
         }
       } else {
         totalDelay = inheritedDelayDays;
@@ -219,12 +220,13 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
       totalDelay = inheritedDelayDays + newDelayFormed;
     } else if (targetEnd && eventDate && eventDate <= targetEnd) {
       newDelayFormed = 0;
+      const daysEarly = getDaysDifference(eventDate, targetEnd);
       if (baselineEnd && eventDate > baselineEnd) {
         totalDelay = getDaysDifference(baselineEnd, eventDate);
         resolvedDelayDays = Math.max(0, inheritedDelayDays - totalDelay);
       } else {
         totalDelay = 0;
-        resolvedDelayDays = inheritedDelayDays;
+        resolvedDelayDays = Math.max(inheritedDelayDays, daysEarly);
       }
     } else {
       totalDelay = inheritedDelayDays;
@@ -629,11 +631,13 @@ export const ManualInputModal: React.FC<ManualInputModalProps> = ({
                   <span>
                     {inheritedDelayDays > 0 
                       ? `Schedule Fully Recovered: All prior delay resolved! (+${inheritedDelayDays}d recovered at Stage ${milestone.stageOrder})`
+                      : resolvedDelayDays > 0
+                      ? `Schedule Accelerated: +${resolvedDelayDays}d Delay Resolved! (${resolvedDelayDays === 1 ? '1 day' : `${resolvedDelayDays} days`} ahead of planned target)`
                       : 'Schedule Status: On Track — Selected date is within planned baseline.'}
                   </span>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-300">
-                  0d Delay
+                  {resolvedDelayDays > 0 ? `${resolvedDelayDays}d Resolved` : '0d Delay'}
                 </span>
               </div>
 

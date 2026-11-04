@@ -1107,6 +1107,11 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         const isNewDelayHere = !isUnstarted && stageDelta > 0;
                         const hasInheritedShift = currVar > 0 && !isNewDelayHere;
                         const recoveredDays = isDone ? Math.max(0, prevVar - currVar) : 0;
+                        const targetForEarlyCheck = milestone.forecastEndDate || milestone.committedBaselineEndDate;
+                        const earlyResolvedDays = (isDone && milestone.actualEndDate && targetForEarlyCheck && milestone.actualEndDate < targetForEarlyCheck)
+                          ? getDaysDifference(milestone.actualEndDate, targetForEarlyCheck)
+                          : 0;
+                        const displayResolvedDays = Math.max(recoveredDays, earlyResolvedDays);
 
                         const bStart = milestone.committedBaselineStartDate || po.poDate;
                         const bEnd = milestone.committedBaselineEndDate || po.committedDeliveryDate;
@@ -1245,11 +1250,11 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                     {isNewDelayHere 
                                       ? `Completed (+${stageDelta}d delay added)` 
                                       : currVar > 0 
-                                      ? (recoveredDays > 0 
-                                          ? `Completed (${recoveredDays === 1 ? '1 day' : `${recoveredDays} days`} delay resolved, Previous: +${currVar}d)` 
+                                      ? (displayResolvedDays > 0 
+                                          ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved, Previous: +${currVar}d)` 
                                           : `Completed (Previous: +${currVar}d)`)
-                                      : recoveredDays > 0 
-                                      ? `Completed (${recoveredDays === 1 ? '1 day' : `${recoveredDays} days`} delay resolved)` 
+                                      : displayResolvedDays > 0 
+                                      ? `Completed (${displayResolvedDays === 1 ? '1 day' : `${displayResolvedDays} days`} delay resolved)` 
                                       : 'Completed'}
                                   </span>
                                 ) : isStarted ? (
@@ -1353,16 +1358,10 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                   msRevStart = formData.orderedDate;
                                   msRevEnd = formData.expectedDate || (msRevStart ? addDays(msRevStart, Math.max(0, msPlanDuration - 1)) : canonical.revisedEnd);
                                 }
-                                if (formData.endDate) {
-                                  msRevEnd = formData.endDate;
-                                }
                               } else {
                                 if (formData.startDate) {
                                   msRevStart = formData.startDate;
-                                  msRevEnd = formData.endDate || (msRevStart ? addDays(msRevStart, Math.max(1, msPlanDuration) - 1) : canonical.revisedEnd);
-                                }
-                                if (formData.endDate) {
-                                  msRevEnd = formData.endDate;
+                                  msRevEnd = canonical.revisedEnd || (msRevStart ? addDays(msRevStart, Math.max(1, msPlanDuration) - 1) : msPlanEnd);
                                 }
                               }
 
@@ -1573,6 +1572,39 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                       </div>
                                     </div>
                                   )}
+
+                                  {(() => {
+                                    const effectiveCompDate = stageKey === 'material_receipt'
+                                      ? (formData.receivedDate || formData.endDate)
+                                      : formData.endDate;
+                                    const targetLimitForForm = stageKey === 'material_receipt'
+                                      ? (formData.expectedDate || msRevEnd || bEnd)
+                                      : (msRevEnd || bEnd);
+
+                                    const formEarlyDays = (effectiveCompDate && targetLimitForForm && effectiveCompDate < targetLimitForForm)
+                                      ? getDaysDifference(effectiveCompDate, targetLimitForForm)
+                                      : 0;
+                                    const formResolvedDays = Math.max(activeInheritedDelay > 0 ? Math.min(activeInheritedDelay, formEarlyDays || activeInheritedDelay) : 0, formEarlyDays);
+
+                                    if (formResolvedDays > 0 && !isCardDelayed) {
+                                      return (
+                                        <div className="p-3 bg-teal-50 border border-teal-300 rounded-xl space-y-1.5 text-xs">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1.5 font-bold text-teal-950 text-[11px]">
+                                              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                                              <span>
+                                                Schedule Accelerated: <strong className="text-teal-800 font-mono">+{formResolvedDays}d Delay Resolved</strong> ({formResolvedDays === 1 ? '1 day' : `${formResolvedDays} days`} ahead of planned target)
+                                              </span>
+                                            </div>
+                                            <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                                              {formResolvedDays}d Resolved
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
 
                                 {isCardDelayed && (
                                   <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5 text-xs">
@@ -2407,12 +2439,13 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                         netRemainingDelay = inheritedDelay + newDelay;
                       } else if (recDate && crossingLine && recDate <= crossingLine) {
                         newDelay = 0;
+                        const daysEarly = getDaysDifference(recDate, crossingLine);
                         if (baselineEnd && recDate > baselineEnd) {
                           netRemainingDelay = getDaysDifference(baselineEnd, recDate);
                           resolvedDelay = Math.max(0, inheritedDelay - netRemainingDelay);
                         } else {
                           netRemainingDelay = 0;
-                          resolvedDelay = inheritedDelay;
+                          resolvedDelay = Math.max(inheritedDelay, daysEarly);
                         }
                       } else {
                         netRemainingDelay = inheritedDelay;
@@ -2449,12 +2482,13 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       netRemainingDelay = inheritedDelay + newDelay;
                     } else if (targetEnd && compDate && compDate <= targetEnd) {
                       newDelay = 0;
+                      const daysEarly = getDaysDifference(compDate, targetEnd);
                       if (baselineEnd && compDate > baselineEnd) {
                         netRemainingDelay = getDaysDifference(baselineEnd, compDate);
                         resolvedDelay = Math.max(0, inheritedDelay - netRemainingDelay);
                       } else {
                         netRemainingDelay = 0;
-                        resolvedDelay = inheritedDelay;
+                        resolvedDelay = Math.max(inheritedDelay, daysEarly);
                       }
                     } else {
                       netRemainingDelay = inheritedDelay;
@@ -2491,21 +2525,22 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                   );
                 }
 
-                // 1. ALL DELAYS RESOLVED / ON BASELINE SCHEDULE (0d net delay)
+                // 1. ALL DELAYS RESOLVED / EARLY COMPLETION / ON BASELINE SCHEDULE (0d net delay)
                 if (maxTotalDelay <= 0) {
+                  const displayResolved = Math.max(maxResolvedDelay, maxNetInheritedDelay);
                   return (
                     <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2 text-xs">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 font-bold text-emerald-950 text-[11px]">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span>
-                            {maxNetInheritedDelay > 0 
-                              ? `Schedule Fully Recovered: All prior delay resolved! (+${maxNetInheritedDelay}d recovered at Stage ${stageOrder})`
+                            {displayResolved > 0 
+                              ? `Schedule Accelerated: +${displayResolved}d Delay Resolved! (${displayResolved === 1 ? '1 day' : `${displayResolved} days`} ahead of planned target)`
                               : `Schedule Status: On Track — Selected date is within planned schedule.`}
                           </span>
                         </div>
                         <span className="font-mono font-bold text-emerald-700 text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300">
-                          0d Delay
+                          {displayResolved > 0 ? `${displayResolved}d Resolved` : '0d Delay'}
                         </span>
                       </div>
 

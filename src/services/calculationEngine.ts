@@ -1150,18 +1150,18 @@ export function getMilestoneRevisedDates(
   );
 
   // Revised Start:
-  // 1. If actualStartDate exists, use it.
+  // 1. If actualStartDate exists and is later than baselineStart, use actualStartDate.
   // 2. Otherwise if forecastStartDate exists and is later than baselineStart, use forecastStartDate as single source of truth.
   // 3. Otherwise if previous stage ends after baselineStart, shift start to previous stage end.
   // 4. Otherwise use baselineStart.
-  let revisedStart = ms.actualStartDate || '';
+  let revisedStart = (ms.actualStartDate && (!baselineStart || ms.actualStartDate > baselineStart)) ? ms.actualStartDate : '';
   if (!revisedStart) {
     if (ms.forecastStartDate && baselineStart && ms.forecastStartDate > baselineStart) {
       revisedStart = ms.forecastStartDate;
     } else if (baselineStart && prevEffectiveEnd && prevEffectiveEnd > baselineStart) {
       revisedStart = prevEffectiveEnd;
     } else {
-      revisedStart = baselineStart || ms.forecastStartDate || '';
+      revisedStart = baselineStart || ms.forecastStartDate || ms.actualStartDate || '';
     }
   }
 
@@ -1175,42 +1175,44 @@ export function getMilestoneRevisedDates(
   const addedDelayHere = Math.max(0, currVar - prevVar);
 
   // Revised End:
-  // 1. If actualEndDate exists, use it.
-  // 2. Otherwise if forecastEndDate exists and is later than baselineEnd, use forecastEndDate.
-  // 3. Otherwise if this milestone added new delay, add baselineDuration + addedDelayHere to revisedStart.
-  // 4. Otherwise if start shifted, add baseline duration to revisedStart.
-  // 5. Otherwise use baselineEnd.
-  let revisedEnd = ms.actualEndDate || '';
-  if (!revisedEnd) {
-    const hasInPrepSub = ms.subdivisions?.some(s => s.status === 'In Progress');
-    const isActivelyStartedOrInProgress = Boolean(ms.actualStartDate) || Boolean(hasInPrepSub) || ms.status === 'In Progress';
+  // Baseline / revised target benchmark date:
+  let targetEnd = '';
+  const hasInPrepSub = ms.subdivisions?.some(s => s.status === 'In Progress');
+  const isActivelyStartedOrInProgress = Boolean(ms.actualStartDate) || Boolean(hasInPrepSub) || ms.status === 'In Progress';
 
-    if (isActivelyStartedOrInProgress && ms.forecastEndDate && (!baselineEnd || ms.forecastEndDate > baselineEnd)) {
-      revisedEnd = ms.forecastEndDate;
+  if (isActivelyStartedOrInProgress && ms.forecastEndDate && (!baselineEnd || ms.forecastEndDate > baselineEnd)) {
+    targetEnd = ms.forecastEndDate;
+  }
+  
+  if (addedDelayHere > 0 && revisedStart) {
+    const candidateWithAdded = addDays(revisedStart, baselineDuration + addedDelayHere - 1);
+    if (!targetEnd || candidateWithAdded > targetEnd) {
+      targetEnd = candidateWithAdded;
     }
-    
-    if (addedDelayHere > 0 && revisedStart) {
-      const candidateWithAdded = addDays(revisedStart, baselineDuration + addedDelayHere - 1);
-      if (!revisedEnd || candidateWithAdded > revisedEnd) {
-        revisedEnd = candidateWithAdded;
-      }
-    } else if (startShift > 0 && revisedStart) {
-      const candidateFromShift = addDays(revisedStart, baselineDuration - 1);
-      if (!revisedEnd || candidateFromShift > revisedEnd) {
-        revisedEnd = candidateFromShift;
-      }
+  } else if (startShift > 0 && revisedStart) {
+    const candidateFromShift = addDays(revisedStart, baselineDuration - 1);
+    if (!targetEnd || candidateFromShift > targetEnd) {
+      targetEnd = candidateFromShift;
     }
+  }
 
-    if (isActivelyStartedOrInProgress && currVar > 0 && baselineEnd) {
-      const candidateFromVar = addDays(baselineEnd, currVar);
-      if (!revisedEnd || candidateFromVar > revisedEnd) {
-        revisedEnd = candidateFromVar;
-      }
+  if (isActivelyStartedOrInProgress && currVar > 0 && baselineEnd) {
+    const candidateFromVar = addDays(baselineEnd, currVar);
+    if (!targetEnd || candidateFromVar > targetEnd) {
+      targetEnd = candidateFromVar;
     }
+  }
 
-    if (!revisedEnd) {
-      revisedEnd = baselineEnd || (revisedStart ? addDays(revisedStart, baselineDuration - 1) : '');
-    }
+  if (!targetEnd) {
+    targetEnd = baselineEnd || (revisedStart ? addDays(revisedStart, baselineDuration - 1) : '');
+  }
+
+  // If actualEndDate exists and is delayed beyond targetEnd, revisedEnd reflects the delayed completion date.
+  // But if actualEndDate completed on-time or early, revisedEnd MUST PRESERVE the benchmark targetEnd!
+  // It must never overwrite an on-time or early target date with an early completion date.
+  let revisedEnd = targetEnd;
+  if (ms.actualEndDate && targetEnd && ms.actualEndDate > targetEnd) {
+    revisedEnd = ms.actualEndDate;
   }
 
   // Ensure revisedEnd is never before revisedStart
