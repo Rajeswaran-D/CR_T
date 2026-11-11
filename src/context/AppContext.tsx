@@ -2362,13 +2362,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? maxFinalForecast
         : finalBaselineDelivery;
 
+      const finalLines = updatedLines.map(line => ({
+        ...line,
+        milestones: line.milestones.map((m, mIdx) => {
+          if (m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3 || mIdx === 2) {
+            return {
+              ...m,
+              delayReason: reason || m.delayReason,
+              delayCategory: m.delayCategory || 'Baseline Revision'
+            };
+          }
+          return m;
+        })
+      }));
+
       return {
         ...p,
-        status: p.status === 'Baseline Pending' ? 'In Progress' : getPurchaseOrderStatus(updatedLines, p.isClosed),
+        status: p.status === 'Baseline Pending' ? 'In Progress' : getPurchaseOrderStatus(finalLines, p.isClosed),
         committedDeliveryDate: finalBaselineDelivery,
         revisedDeliveryDate: finalRevisedDelivery,
         revisions: [...(p.revisions || []), newRev],
-        productLines: updatedLines,
+        productLines: finalLines,
         lastUpdatedBy: user,
         lastUpdatedAt: new Date().toISOString()
       };

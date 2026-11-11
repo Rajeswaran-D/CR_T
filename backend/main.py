@@ -534,25 +534,23 @@ async def delete_order(
     if conn:
         try:
             loop = asyncio.get_event_loop()
-            deleted = await loop.run_in_executor(None, delete_order_from_db, conn, org_id, order_id)
-            if not deleted:
-                raise HTTPException(status_code=404, detail="Order not found")
-            _invalidate_cache(org_id)
-            return Response(status_code=204)
+            await loop.run_in_executor(None, delete_order_from_db, conn, org_id, order_id)
+        except Exception as e:
+            logger.warning(f"delete_order db deletion error for {order_id}: {e}")
         finally:
             try:
                 conn.close()
             except Exception:
                 pass
 
-    # Fallback
+    # Ensure memory state also purges the order if present
     mem = get_memory_state()
     current = mem.get("cft_pos") or []
     filtered = [o for o in current if o.get("id") != order_id]
-    if len(filtered) == len(current):
-        raise HTTPException(status_code=404, detail="Order not found")
-    mem["cft_pos"] = filtered
-    schedule_state_save()
+    if len(filtered) != len(current):
+        mem["cft_pos"] = filtered
+        schedule_state_save()
+
     _invalidate_cache(org_id)
     return Response(status_code=204)
 

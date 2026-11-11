@@ -43,14 +43,27 @@ export function getPOManufacturingStatus(po: PurchaseOrder): POStatusSummary {
     (line.milestones || []).map(milestone => ({ line, milestone }))
   );
   const firstLine = po.productLines[0];
-  const firstLineMilestones = firstLine?.milestones || [];
-  const totalStagesCount = firstLineMilestones.length || 14;
-  const completedStagesCount = firstLineMilestones.filter(m => m.status === 'Completed' || Boolean(m.actualEndDate)).length;
-  const progressPercent = totalStagesCount > 0 ? Math.round((completedStagesCount / totalStagesCount) * 100) : 0;
 
-  const allCompleted = totalStagesCount > 0 && completedStagesCount === totalStagesCount && po.productLines.every(l =>
-    (l.milestones || []).length > 0 && (l.milestones || []).every(m => m.status === 'Completed' || Boolean(m.actualEndDate))
-  );
+  // Quantity-weighted multi-product progress calculation
+  const totalWeight = po.productLines.reduce((acc, l) => acc + (l.qty || 1), 0);
+  const weightedProgressSum = po.productLines.reduce((acc, l) => {
+    const msList = l.milestones || [];
+    const totalMs = msList.length || 14;
+    const completedMs = msList.filter(m => m.status === 'Completed' || Boolean(m.actualEndDate) || m.completionPct === 100).length;
+    const inProgMs = msList.find(m => m.status !== 'Completed' && !m.actualEndDate && (m.status === 'In Progress' || Boolean(m.actualStartDate)));
+    const partialCredit = inProgMs ? ((inProgMs.completionPct && inProgMs.completionPct > 0 ? inProgMs.completionPct : 50) / 100) : 0;
+    const linePct = totalMs > 0 ? Math.min(100, Math.round(((completedMs + partialCredit) / totalMs) * 100)) : 0;
+    return acc + (linePct * (l.qty || 1));
+  }, 0);
+  const progressPercent = totalWeight > 0 ? Math.round(weightedProgressSum / totalWeight) : 0;
+
+  const totalStagesCount = po.productLines.reduce((acc, l) => acc + (l.milestones?.length || 14), 0);
+  const completedStagesCount = po.productLines.reduce((acc, l) => acc + (l.milestones || []).filter(m => m.status === 'Completed' || Boolean(m.actualEndDate)).length, 0);
+
+  const allCompleted = po.productLines.length > 0 && po.productLines.every(l => {
+    const msList = l.milestones || [];
+    return msList.length > 0 && msList.every(m => m.status === 'Completed' || Boolean(m.actualEndDate) || m.completionPct === 100);
+  });
   const isOrderFinished = po.isClosed || (allCompleted && po.status === 'Completed');
 
   // Find the earliest active milestone across every product line.

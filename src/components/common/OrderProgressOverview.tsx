@@ -36,8 +36,9 @@ export const OrderProgressOverview: React.FC<OrderProgressOverviewProps> = ({
 
     const activeMs = (line.milestones || []).find(m => m.status !== 'Completed' && !m.actualEndDate) || line.milestones[line.milestones.length - 1];
 
-    // Give partial credit for currently in-progress milestones (50% of 1 milestone weight)
-    const rawScore = completedMilestones + (inProgressMs ? 0.5 : 0);
+    // Give partial credit for currently in-progress milestones (respect completionPct or 50% default)
+    const partialCredit = inProgressMs ? ((inProgressMs.completionPct && inProgressMs.completionPct > 0 ? inProgressMs.completionPct : 50) / 100) : 0;
+    const rawScore = completedMilestones + partialCredit;
     const progressPct = Math.min(100, Math.round((rawScore / totalMilestones) * 100));
     const isCompleted = totalMilestones > 0 && completedMilestones === totalMilestones;
 
@@ -108,7 +109,7 @@ export const OrderProgressOverview: React.FC<OrderProgressOverviewProps> = ({
               Order Execution Progress: {overallProgressPct}%
             </h2>
             <p className="text-xs text-slate-300">
-              Aggregated across all {totalLines} product lines &amp; {totalStagesCount} stages for PO <strong className="font-mono text-cyan-300">{po.poNumber}</strong>
+              Aggregated across all {totalLines} product lines ({totalQty} Pcs) by quantity-weighted average for PO <strong className="font-mono text-cyan-300">{po.poNumber}</strong>
             </p>
           </div>
 

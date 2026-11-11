@@ -793,9 +793,9 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       const isRecovery = step?.isRecovery;
       const delayAdded = step?.stageDelayAdded || 0;
       const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
-      const cleanName = (ms.name || '').replace(/^\d+\.\s*/, '');
-      const isStage3Baseline = ms.stageOrder === 3 || ms.key === 'baseline_review';
-      const stage3Reason = latestRev?.reason || ms.delayReason || (po.revisions && po.revisions.length > 0 ? po.revisions[0].reason : null);
+      const cleanName = (ms.name || '').replace(/^(\d+\.)+\s*/, '');
+      const isStage3Baseline = idx === 2 || ms.stageOrder === 3 || ms.key === 'pm_baseline' || ms.key === 'baseline_review';
+      const stage3Reason = ms.delayReason || latestRev?.reason || (po.revisions && po.revisions.length > 0 ? po.revisions[po.revisions.length - 1].reason : null) || (po.revisions && po.revisions.length > 0 ? po.revisions[0].reason : null);
 
       let varianceBadge = '<span style="color:#64748b;font-weight:600;">0d</span>';
       if (varDays > 0) {
@@ -2305,9 +2305,9 @@ ${po.closureNotes ? `
                             const step = pFlow.delaySteps.find(s => s.stageKey === ms.key || s.stageOrder === ms.stageOrder);
                             const delayAdded = step?.stageDelayAdded || 0;
                             const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
-                            const cleanStageName = (ms.name || '').replace(/^\d+\.\s*/, '');
-                            const isStage3Baseline = ms.stageOrder === 3 || ms.key === 'baseline_review';
-                            const stage3Reason = pLatestRev?.reason || ms.delayReason || (pRevs.length > 0 ? pRevs[0].reason : null);
+                            const cleanStageName = (ms.name || '').replace(/^(\d+\.)+\s*/, '');
+                            const isStage3Baseline = idx === 2 || ms.stageOrder === 3 || ms.key === 'pm_baseline' || ms.key === 'baseline_review';
+                            const stage3Reason = ms.delayReason || pLatestRev?.reason || (pRevs.length > 0 ? pRevs[pRevs.length - 1].reason : null) || (pRevs.length > 0 ? pRevs[0].reason : null);
 
                             const reason = isStage3Baseline && stage3Reason
                               ? stage3Reason
