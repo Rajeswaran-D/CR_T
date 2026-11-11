@@ -779,6 +779,14 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
     // Milestone rows across the primary product line
     const line = po.productLines[0];
     const milestones = line?.milestones || [];
+    const lastMs = milestones[milestones.length - 1];
+    const baselineEnd = lastMs?.committedBaselineEndDate || po.revisedDeliveryDate;
+    const targetDeliv = po.actualDeliveryDate || po.committedDeliveryDate;
+    const hasBaselineOverrun = Boolean(baselineEnd && targetDeliv && baselineEnd > targetDeliv);
+    const overrunDays = hasBaselineOverrun
+      ? Math.max(0, Math.round((new Date(baselineEnd).getTime() - new Date(targetDeliv).getTime()) / 864e5))
+      : 0;
+    const latestRev = po.revisions && po.revisions.length > 0 ? po.revisions[po.revisions.length - 1] : null;
 
     const milestoneRows = milestones.map((ms, idx) => {
       const step = delayLog.delaySteps.find(s => s.stageKey === ms.key || s.stageOrder === ms.stageOrder);
@@ -786,6 +794,8 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       const delayAdded = step?.stageDelayAdded || 0;
       const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
       const cleanName = (ms.name || '').replace(/^\d+\.\s*/, '');
+      const isStage3Baseline = ms.stageOrder === 3 || ms.key === 'baseline_review';
+      const stage3Reason = latestRev?.reason || ms.delayReason || (po.revisions && po.revisions.length > 0 ? po.revisions[0].reason : null);
 
       let varianceBadge = '<span style="color:#64748b;font-weight:600;">0d</span>';
       if (varDays > 0) {
@@ -795,14 +805,20 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       }
 
       let impactBadge = '—';
-      if (delayAdded > 0) {
+      if (isStage3Baseline && (stage3Reason || hasBaselineOverrun)) {
+        impactBadge = `<span style="background:${hasBaselineOverrun ? '#fef3c7' : '#e0f2fe'};color:${hasBaselineOverrun ? '#92400e' : '#0369a1'};border:1px solid ${hasBaselineOverrun ? '#fcd34d' : '#bae6fd'};padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">${hasBaselineOverrun ? `+${overrunDays}d baseline change` : `Rev ${revCount || 1} edited`}</span>`;
+      } else if (delayAdded > 0) {
         impactBadge = `<span style="background:#ffe4e6;color:#9f1239;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">+${delayAdded}d delay</span>`;
       } else if (delayAdded < 0) {
         impactBadge = `<span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">${delayAdded}d resolved</span>`;
       }
 
-      const reason = ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—'));
-      const cat = ms.delayCategory || step?.delayCategory || '—';
+      const reason = isStage3Baseline && stage3Reason
+        ? stage3Reason
+        : (ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—')));
+      const cat = isStage3Baseline && (stage3Reason || hasBaselineOverrun)
+        ? 'Baseline Revision'
+        : (ms.delayCategory || step?.delayCategory || '—');
 
       return `<tr style="font-size:9.5px;border-bottom:1px solid #f1f5f9;background:${idx % 2 === 0 ? '#ffffff' : '#fcfcfd'};">
         <td style="padding:5px 8px;font-weight:700;color:#334155;">${ms.stageOrder || idx + 1}. ${cleanName}</td>
@@ -969,6 +985,12 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
 </div>
 
 <!-- 14-STAGE MANUFACTURING & DELAY LOG LEDGER -->
+${hasBaselineOverrun ? `
+<div style="margin-bottom:10px;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:10px;color:#78350f;">
+  <strong>Baseline Changes Note:</strong> Baseline schedule (<strong>${baselineEnd}</strong>) exceeded ${po.actualDeliveryDate ? 'actual' : 'committed'} delivery date (<strong>${targetDeliv}</strong>) by <strong>+${overrunDays} days</strong>.
+  ${latestRev?.reason ? `<br/><span style="color:#92400e;margin-top:2px;display:inline-block;">Reason: ${latestRev.reason}</span>` : ''}
+</div>
+` : ''}
 <div>
   <h3 style="font-size:10px;font-weight:800;color:#0f172a;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">14-Stage Milestone Baseline &amp; Delay Log Ledger</h3>
   <table>
@@ -2080,6 +2102,14 @@ ${po.closureNotes ? `
         const pLine = previewPO.productLines[0];
         const pMilestones = pLine?.milestones || [];
         const pRevs = previewPO.revisions || [];
+        const pLastMs = pMilestones[pMilestones.length - 1];
+        const pBaselineEnd = pLastMs?.committedBaselineEndDate || previewPO.revisedDeliveryDate;
+        const pDeliveryTarget = previewPO.actualDeliveryDate || previewPO.committedDeliveryDate;
+        const pHasBaselineOverrun = Boolean(pBaselineEnd && pDeliveryTarget && pBaselineEnd > pDeliveryTarget);
+        const pOverrunDays = pHasBaselineOverrun
+          ? Math.max(0, Math.round((new Date(pBaselineEnd).getTime() - new Date(pDeliveryTarget).getTime()) / 864e5))
+          : 0;
+        const pLatestRev = pRevs.length > 0 ? pRevs[pRevs.length - 1] : null;
 
         return (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2229,6 +2259,25 @@ ${po.closureNotes ? `
                     </div>
                   </div>
 
+                  {/* Baseline Change Note Banner (if exceeded delivery date) */}
+                  {pHasBaselineOverrun && (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 shadow-2xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 text-xs">
+                        <div className="font-bold text-amber-950 flex items-center gap-2">
+                          <span>Baseline Change Note</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                            +{pOverrunDays}d vs {previewPO.actualDeliveryDate ? 'Actual' : 'Committed'} Delivery
+                          </span>
+                        </div>
+                        <div className="text-amber-800 mt-1">
+                          Baseline schedule ({pBaselineEnd}) exceeded {previewPO.actualDeliveryDate ? 'actual' : 'committed'} delivery date ({pDeliveryTarget}) by +{pOverrunDays} days.
+                          {pLatestRev?.reason ? ` Note: ${pLatestRev.reason}` : (previewPO.closureNotes ? ` Closure Note: ${previewPO.closureNotes}` : '')}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 14-Stage Milestone Baseline & Delay Ledger */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
@@ -2256,9 +2305,17 @@ ${po.closureNotes ? `
                             const step = pFlow.delaySteps.find(s => s.stageKey === ms.key || s.stageOrder === ms.stageOrder);
                             const delayAdded = step?.stageDelayAdded || 0;
                             const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
-                            const reason = ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—'));
-                            const cat = ms.delayCategory || step?.delayCategory || '—';
                             const cleanStageName = (ms.name || '').replace(/^\d+\.\s*/, '');
+                            const isStage3Baseline = ms.stageOrder === 3 || ms.key === 'baseline_review';
+                            const stage3Reason = pLatestRev?.reason || ms.delayReason || (pRevs.length > 0 ? pRevs[0].reason : null);
+
+                            const reason = isStage3Baseline && stage3Reason
+                              ? stage3Reason
+                              : (ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—')));
+
+                            const cat = isStage3Baseline && (stage3Reason || pHasBaselineOverrun)
+                              ? 'Baseline Revision'
+                              : (ms.delayCategory || step?.delayCategory || '—');
 
                             return (
                               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
@@ -2270,13 +2327,32 @@ ${po.closureNotes ? `
                                   {varDays > 0 ? <span className="text-rose-700">+{varDays}d</span> : varDays < 0 ? <span className="text-emerald-700">{varDays}d</span> : <span className="text-slate-400">0d</span>}
                                 </td>
                                 <td className="p-2.5 text-center whitespace-nowrap">
-                                  {delayAdded > 0 ? (
+                                  {isStage3Baseline && (stage3Reason || pHasBaselineOverrun) ? (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                      pHasBaselineOverrun
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : 'bg-cyan-100 text-cyan-900 border-cyan-300'
+                                    }`}>
+                                      {pHasBaselineOverrun ? `+${pOverrunDays}d baseline change` : `Rev ${pRevs.length || 1} baseline edit`}
+                                    </span>
+                                  ) : delayAdded > 0 ? (
                                     <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">+{delayAdded}d delay</span>
                                   ) : delayAdded < 0 ? (
                                     <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">{delayAdded}d resolved</span>
                                   ) : <span className="text-slate-400">—</span>}
                                 </td>
-                                <td className="p-2.5 text-slate-600 max-w-[160px] truncate" title={reason}>{reason}</td>
+                                <td className="p-2.5 text-slate-600 max-w-[200px]" title={reason}>
+                                  {isStage3Baseline && stage3Reason ? (
+                                    <div className="flex items-center gap-1.5" title={stage3Reason}>
+                                      <span className="font-bold text-cyan-950 bg-cyan-100/90 px-1.5 py-0.2 rounded border border-cyan-300 text-[9px] shrink-0">
+                                        Reason:
+                                      </span>
+                                      <span className="text-slate-900 font-semibold truncate">{stage3Reason}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="truncate block">{reason}</span>
+                                  )}
+                                </td>
                                 <td className="p-2.5 text-slate-400 font-mono text-[10px] whitespace-nowrap">{cat}</td>
                               </tr>
                             );

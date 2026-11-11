@@ -16,11 +16,11 @@ import type {
   MaterialItem
 } from '../types';
 import { ROLE_PERMISSIONS, isMilestoneOwnedByRole, canRoleManageSubdivision } from '../types';
-import { 
-  INITIAL_PURCHASE_ORDERS, 
-  INITIAL_TEMPLATES, 
-  INITIAL_RECTIFICATIONS, 
-  INITIAL_AUDIT_LOG, 
+import {
+  INITIAL_PURCHASE_ORDERS,
+  INITIAL_TEMPLATES,
+  INITIAL_RECTIFICATIONS,
+  INITIAL_AUDIT_LOG,
   INITIAL_CONFIG,
   INITIAL_PRODUCTS
 } from '../data/mockData';
@@ -52,7 +52,7 @@ interface AppContextType {
   config: SystemConfig;
   isOffline: boolean;
   setIsOffline: (offline: boolean) => void;
-  
+
   // Actions
   createProduct: (newProduct: Partial<ProductMasterItem>) => { success: boolean; id?: string };
   updateProduct: (productId: string, updates: Partial<ProductMasterItem>) => { success: boolean; error?: string };
@@ -140,10 +140,11 @@ interface AppContextType {
       lineId: string;
       milestones: { key: string; name: string; durationDays: number }[];
     }[];
+    autoFit?: boolean;
   }) => { success: boolean; error?: string };
 
   approveRectification: (actionId: string, decision: 'Accepted' | 'Rejected', decisionNotes: string, user: string) => void;
-  
+
   createPurchaseOrder: (newPo: Partial<PurchaseOrder>) => { success: boolean; poId?: string; error?: string };
   importPurchaseOrders: (newPos: PurchaseOrder[], replaceExisting?: boolean) => { success: boolean; count: number; error?: string };
 
@@ -213,7 +214,7 @@ const markPendingSharedSync = (key: StorageKey, serialized: string) => {
     const pending = readPendingSharedSync();
     pending[key] = serialized;
     localStorage.setItem(PENDING_SHARED_SYNC_STORAGE_KEY, JSON.stringify(pending));
-  } catch {}
+  } catch { }
 };
 
 const clearPendingSharedSync = (key: StorageKey, serialized: string) => {
@@ -226,7 +227,7 @@ const clearPendingSharedSync = (key: StorageKey, serialized: string) => {
     } else {
       localStorage.removeItem(PENDING_SHARED_SYNC_STORAGE_KEY);
     }
-  } catch {}
+  } catch { }
 };
 
 // Broadcasts the outcome of server persistence attempts so the UI can show a
@@ -237,7 +238,7 @@ export const STORAGE_SYNC_EVENT = 'cft:storage-sync';
 const emitStorageSyncStatus = (ok: boolean) => {
   try {
     window.dispatchEvent(new CustomEvent(STORAGE_SYNC_EVENT, { detail: { ok } }));
-  } catch {}
+  } catch { }
 };
 
 const deleteOrderOnServer = (poId: string) => {
@@ -276,11 +277,11 @@ const rememberDeletedOrder = (poId: string) => {
       list.push(poId);
       localStorage.setItem('cft_deleted_order_ids', JSON.stringify(list));
     }
-  } catch {}
+  } catch { }
   if (crossTabChannel) {
     try {
       crossTabChannel.postMessage({ type: 'CFT_PO_DELETED', poId });
-    } catch {}
+    } catch { }
   }
 };
 
@@ -292,7 +293,7 @@ const stripRecentlyDeleted = (orders: PurchaseOrder[]): PurchaseOrder[] => {
   let localDeletedIds: string[] = [];
   try {
     localDeletedIds = JSON.parse(localStorage.getItem('cft_deleted_order_ids') || '[]');
-  } catch {}
+  } catch { }
   const deletedSet = new Set([...recentlyDeletedOrders.keys(), ...localDeletedIds]);
   if (deletedSet.size === 0) return orders;
   return orders.filter(o => !deletedSet.has(o.id));
@@ -389,21 +390,21 @@ const withRefreshedStatus = (po: PurchaseOrder, productLines: PurchaseOrder['pro
     const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3);
     return pm?.status === 'Completed' || Boolean(pm?.actualEndDate) || (pm?.completionPct === 100);
   });
-  const hasSubsequentProgress = productLines.some(line => 
+  const hasSubsequentProgress = productLines.some(line =>
     (line.milestones || []).some(m => m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
   );
   const stillPendingBaseline = (po.status === 'Baseline Pending') && !isBaselineDone && !hasSubsequentProgress;
 
   const cleanLines = stillPendingBaseline
     ? productLines.map(line => ({
-        ...line,
-        overallVarianceDays: 0,
-        status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
-        milestones: line.milestones.map(m => ({
-          ...m,
-          varianceDays: 0
-        }))
+      ...line,
+      overallVarianceDays: 0,
+      status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
+      milestones: line.milestones.map(m => ({
+        ...m,
+        varianceDays: 0
       }))
+    }))
     : productLines;
 
   return {
@@ -412,10 +413,10 @@ const withRefreshedStatus = (po: PurchaseOrder, productLines: PurchaseOrder['pro
     status: po.isCancelled || po.status === 'Cancelled'
       ? 'Cancelled'
       : po.isClosed
-      ? 'Closed'
-      : stillPendingBaseline
-      ? 'Baseline Pending'
-      : getPurchaseOrderStatus(cleanLines, po.isClosed),
+        ? 'Closed'
+        : stillPendingBaseline
+          ? 'Baseline Pending'
+          : getPurchaseOrderStatus(cleanLines, po.isClosed),
     lastUpdatedAt: new Date().toISOString()
   };
 };
@@ -475,21 +476,21 @@ const ALIGNED_14_STAGES = [
 ];
 
 function repairMilestonesTo14Aligned(
-  existingMilestones: Milestone[], 
-  poDate: string, 
-  lineId: string, 
+  existingMilestones: Milestone[],
+  poDate: string,
+  lineId: string,
   targetEndDate?: string,
   materials?: MaterialItem[]
 ): Milestone[] {
   const cleanExistingMilestones = existingMilestones || [];
   const start = poDate && isValidDateString(poDate) ? poDate : todayLocal();
-  const rawMaterialLeadTime = materials && materials.length > 0 
-    ? Math.max(...materials.map(m => m.leadTimeDays)) 
+  const rawMaterialLeadTime = materials && materials.length > 0
+    ? Math.max(...materials.map(m => m.leadTimeDays))
     : 14;
 
   // If the product line already has 14 fully initialized milestones with committed baseline dates,
   // preserve the established baseline schedule without wiping or re-scaling, ensuring consecutive continuity.
-  const hasFullCommitted14 = cleanExistingMilestones.length === 14 && 
+  const hasFullCommitted14 = cleanExistingMilestones.length === 14 &&
     cleanExistingMilestones.every(m => m.key === 'corb_release' || (m.committedBaselineStartDate && m.committedBaselineEndDate));
 
   if (hasFullCommitted14) {
@@ -519,20 +520,20 @@ function repairMilestonesTo14Aligned(
       const stage1Start = isStage1
         ? (existing?.actualStartDate || poDate || msStart)
         : isCorb
-        ? undefined
-        : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
+          ? undefined
+          : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
       const stage1End = isStage1
         ? (existing?.actualEndDate || stage1Start || poDate || msStart)
         : isCorb
-        ? existing?.actualEndDate
-        : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
+          ? existing?.actualEndDate
+          : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
       const isEffectivelyCompleted = isStage1
         ? true
         : isCorb
-        ? Boolean(existing?.actualEndDate)
-        : (def.key === 'pm_baseline' || def.key === 'baseline_review')
-        ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
-        : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
+          ? Boolean(existing?.actualEndDate)
+          : (def.key === 'pm_baseline' || def.key === 'baseline_review')
+            ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
+            : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
 
       return {
         ...existing,
@@ -608,20 +609,20 @@ function repairMilestonesTo14Aligned(
     const stage1Start = isStage1
       ? (existing?.actualStartDate || poDate || msStart)
       : isCorb
-      ? undefined
-      : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
+        ? undefined
+        : (existing?.actualStartDate || (hasLaterProgress ? (existing?.committedBaselineStartDate || msStart) : undefined));
     const stage1End = isStage1
       ? (existing?.actualEndDate || stage1Start || poDate || msStart)
       : isCorb
-      ? (isCorbCompleted ? existing?.actualEndDate : undefined)
-      : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
+        ? (isCorbCompleted ? existing?.actualEndDate : undefined)
+        : (existing?.actualEndDate || (hasLaterProgress ? (existing?.committedBaselineEndDate || msEnd) : undefined));
     const isEffectivelyCompleted = isStage1
       ? true
       : isCorb
-      ? isCorbCompleted
-      : (def.key === 'pm_baseline' || def.key === 'baseline_review')
-      ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
-      : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
+        ? isCorbCompleted
+        : (def.key === 'pm_baseline' || def.key === 'baseline_review')
+          ? (Boolean(existing?.actualEndDate) && existing?.status === 'Completed')
+          : (Boolean(stage1End) || (hasLaterProgress && Boolean(stage1Start)));
 
     return {
       id: `ms-${lineId}-${def.key}`,
@@ -689,21 +690,21 @@ const normalizeMilestoneFlows = (orders: PurchaseOrder[], todayStr: string): Pur
     const pm = (line.milestones || []).find(m => m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3);
     return pm?.status === 'Completed' || Boolean(pm?.actualEndDate) || (pm?.completionPct === 100);
   });
-  const hasSubsequentProgress = recalculatedLines.some(line => 
+  const hasSubsequentProgress = recalculatedLines.some(line =>
     (line.milestones || []).some(m => m.stageOrder > 3 && (m.status === 'Completed' || Boolean(m.actualStartDate) || Boolean(m.actualEndDate)))
   );
   const stillPendingBaseline = (po.status === 'Baseline Pending') && !isBaselineDone && !hasSubsequentProgress;
 
   const productLines = stillPendingBaseline
     ? recalculatedLines.map(line => ({
-        ...line,
-        overallVarianceDays: 0,
-        status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
-        milestones: line.milestones.map(m => ({
-          ...m,
-          varianceDays: 0
-        }))
+      ...line,
+      overallVarianceDays: 0,
+      status: (line.milestones.some(m => m.status === 'In Progress') ? 'In Progress' : 'On Track') as MilestoneStatus,
+      milestones: line.milestones.map(m => ({
+        ...m,
+        varianceDays: 0
       }))
+    }))
     : recalculatedLines;
 
   return {
@@ -812,7 +813,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const saved = localStorage.getItem('cft_active_role');
       if (saved) return saved as Role;
-    } catch {}
+    } catch { }
     return 'Project Management';
   });
 
@@ -820,7 +821,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveRoleState(role);
     try {
       localStorage.setItem('cft_active_role', role);
-    } catch {}
+    } catch { }
   };
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
     try {
@@ -935,7 +936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           serialized,
           timestamp: Date.now()
         });
-      } catch {}
+      } catch { }
     }
     if (lastPushedRef.current[key] === serialized) return;
     lastPushedRef.current[key] = serialized;
@@ -1122,7 +1123,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 cft_config: localStorage.getItem('cft_config')
               }
             });
-          } catch {}
+          } catch { }
         } else if (data.type === 'CFT_REPLY_LATEST' && data.states) {
           Object.entries(data.states).forEach(([k, s]) => {
             if (typeof s === 'string' && s) {
@@ -1134,7 +1135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       crossTabChannel.addEventListener('message', handleChannelMessage);
       try {
         crossTabChannel.postMessage({ type: 'CFT_REQUEST_LATEST' });
-      } catch {}
+      } catch { }
     }
 
     // Seed the echo-guard with what is already persisted so restored state
@@ -1431,9 +1432,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (isNewDelayCausedByStage && !item.delayReason?.trim()) {
-        return { 
-          success: false, 
-          error: `A delay reason is required for ${line.productName} (Stage ${ms.stageOrder}: ${ms.name.replace(/^\d+\.\s*/, '')}) because the date entered (${item.eventDate}) adds +${newDelayDays}d new delay beyond its scheduled plan (${revisedTargetLimit}).` 
+        return {
+          success: false,
+          error: `A delay reason is required for ${line.productName} (Stage ${ms.stageOrder}: ${ms.name.replace(/^\d+\.\s*/, '')}) because the date entered (${item.eventDate}) adds +${newDelayDays}d new delay beyond its scheduled plan (${revisedTargetLimit}).`
         };
       }
 
@@ -1494,7 +1495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (pendingCritical.length > 0) {
           return {
             success: false,
-            error: `Dependency Violation: Critical path materials pending GRN passed inspection: ${pendingCritical.map(m=>m.itemCode).join(', ')}.`
+            error: `Dependency Violation: Critical path materials pending GRN passed inspection: ${pendingCritical.map(m => m.itemCode).join(', ')}.`
           };
         }
       }
@@ -1683,8 +1684,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
         if (item.delayCategory) {
-          const updatedLine = updatedPOs.find(p=>p.id===item.poId)?.productLines.find(l=>l.id===item.productLineId);
-          const updatedMs = updatedLine?.milestones.find(m=>m.key===item.milestoneKey);
+          const updatedLine = updatedPOs.find(p => p.id === item.poId)?.productLines.find(l => l.id === item.productLineId);
+          const updatedMs = updatedLine?.milestones.find(m => m.key === item.milestoneKey);
           if (updatedMs && (updatedMs.status === 'At Risk' || updatedMs.status === 'Delayed')) {
             const newRects = generateSuggestedRectifications(po.poNumber, updatedLine!, updatedMs, item.delayCategory);
             setRectifications(prev => [...newRects, ...prev]);
@@ -2007,8 +2008,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             orderedDate: effectiveOrdered,
             expectedDate: effectiveExpected,
             receivedDate: effectiveReceived,
-            grnNumber: grnNumber !== undefined 
-              ? (grnNumber || undefined) 
+            grnNumber: grnNumber !== undefined
+              ? (grnNumber || undefined)
               : (effectiveReceived ? (m.grnNumber || `GRN-${effectiveReceived.replace(/-/g, '')}`) : undefined),
             inspectionResult: inspectionResult || m.inspectionResult,
             inspectionNotes: inspectionNotes !== undefined ? (inspectionNotes || undefined) : m.inspectionNotes,
@@ -2061,7 +2062,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     user,
     baselineStartDate,
     changes,
-    milestoneFlows
+    milestoneFlows,
+    autoFit
   }: {
     poId: string;
     reason: string;
@@ -2073,6 +2075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lineId: string;
       milestones: { key: string; name: string; durationDays: number }[];
     }[];
+    autoFit?: boolean;
   }) => {
     if (activeRole !== 'Project Manager (PM Baseline)' && activeRole !== 'Project Management') {
       return { success: false, error: 'Only the Project Manager (PM Baseline) role can approve or edit the baseline.' };
@@ -2252,14 +2255,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         // Calculate baseline schedule starting from BOM Release as per last date (complete) of CORB,
-        // and calculated with contractual delivery date
+        // and calculated with contractual delivery date (or custom durations without scaling if autoFit is false)
         const { milestones: updatedMsListRaw } = calculateMilestonesFromBOM({
           milestones: line.milestones,
           poDate: targetPO.poDate || todayStr,
           corbEndDate: baselineStartDate || corbEndDateVal,
           deliveryDate: targetPO.committedDeliveryDate,
           materials: line.materials,
-          customDurations: Object.keys(customDurationsMap).length > 0 ? customDurationsMap : undefined
+          customDurations: Object.keys(customDurationsMap).length > 0 ? customDurationsMap : undefined,
+          autoFit
         });
 
         let updatedMsList = updatedMsListRaw;
@@ -2306,7 +2310,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               forecastEndDate: pmEnd,
               status: 'Completed' as MilestoneStatus,
               completionPct: 100,
-              docRef: docRef || 'PM-BL-APPROVED'
+              docRef: docRef || 'PM-BL-APPROVED',
+              delayReason: reason
             };
             updatedMsList = cascadeNextMilestoneStart(updatedMsList, pmIdx, pmEnd, user);
           }
@@ -2322,8 +2327,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             milestones: recalced.milestones.map(m => ({
               ...m,
               varianceDays: 0,
-              delayReason: undefined,
-              delayCategory: undefined,
+              delayReason: (m.key === 'pm_baseline' || m.key === 'baseline_review') ? reason : undefined,
+              delayCategory: (m.key === 'pm_baseline' || m.key === 'baseline_review') ? 'Baseline Planning' : undefined,
               delayOwner: undefined
             }))
           };
@@ -2422,9 +2427,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       p => p.poNumber.trim().toLowerCase() === poNumber.toLowerCase()
     );
     if (isDuplicate) {
-      return { 
-        success: false, 
-        error: `Duplicate PO Number: Purchase Order "${poNumber}" already exists in the system. PO Numbers must be strictly unique.` 
+      return {
+        success: false,
+        error: `Duplicate PO Number: Purchase Order "${poNumber}" already exists in the system. PO Numbers must be strictly unique.`
       };
     }
 

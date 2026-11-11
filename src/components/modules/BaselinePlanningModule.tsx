@@ -205,6 +205,35 @@ export const BaselinePlanningModule: React.FC<BaselinePlanningModuleProps> = ({ 
                         Delivery: <strong className={`font-mono ${isDelayed ? 'text-rose-700 font-bold' : ''}`}>{po.revisedDeliveryDate || po.committedDeliveryDate}</strong>
                       </span>
                     </div>
+                    {/* Baseline Revision / Manual Edit Reason */}
+                    {(() => {
+                      const currentBaselineEnd = lastMilestone?.committedBaselineEndDate || po.revisedDeliveryDate;
+                      const latestRev = po.revisions && po.revisions.length > 0 ? po.revisions[po.revisions.length - 1] : null;
+                      const hasOverrun = Boolean(currentBaselineEnd && po.committedDeliveryDate && currentBaselineEnd > po.committedDeliveryDate);
+                      const overrunDays = hasOverrun ? Math.max(0, Math.round((new Date(currentBaselineEnd).getTime() - new Date(po.committedDeliveryDate).getTime()) / 864e5)) : 0;
+
+                      if (!latestRev?.reason && !hasOverrun) {
+                        return null;
+                      }
+
+                      return (
+                        <div className={`mt-1.5 p-2 rounded-lg text-[11px] flex items-start gap-1.5 border ${
+                          hasOverrun 
+                            ? 'bg-amber-50/90 border-amber-300 text-amber-950' 
+                            : 'bg-cyan-50/90 border-cyan-300 text-cyan-950'
+                        }`}>
+                          <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${hasOverrun ? 'text-amber-600' : 'text-cyan-600'}`} />
+                          <div>
+                            <span className="font-bold">
+                              {hasOverrun ? `Baseline Change (+${overrunDays}d vs Delivery):` : `Baseline Rev ${latestRev?.revNumber ?? 1} Reason:`}
+                            </span>{' '}
+                            <span className={hasOverrun ? 'text-amber-800' : 'text-cyan-800'}>
+                              {latestRev?.reason || `Baseline schedule (${currentBaselineEnd}) exceeds committed delivery date (${po.committedDeliveryDate}) by +${overrunDays} days.`}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {isDelayed && statusSummary.delayedStageName && (
                       <div className="mt-1.5 text-[11px] font-medium text-rose-700 flex items-center gap-1">
                         <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />

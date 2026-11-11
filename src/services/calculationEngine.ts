@@ -450,11 +450,12 @@ export function calculateMilestonesFromBOM(params: {
   deliveryDate?: string;
   materials?: MaterialItem[];
   customDurations?: Record<string, number>;
+  autoFit?: boolean;
 }): {
   milestones: Milestone[];
   calculatedDeliveryDate: string;
 } {
-  const { milestones, poDate, corbEndDate, deliveryDate, materials, customDurations } = params;
+  const { milestones, poDate, corbEndDate, deliveryDate, materials, customDurations, autoFit } = params;
   const rawMaterialLeadTime = (materials && materials.length > 0)
     ? Math.max(...materials.map(m => m.leadTimeDays))
     : 14;
@@ -526,7 +527,7 @@ export function calculateMilestonesFromBOM(params: {
   const totalRawDays = rawDurations.reduce((a, b) => a + b, 0);
 
   let scaledDurations = [...rawDurations];
-  if (deliveryDate && isValidDateString(deliveryDate) && deliveryDate > bomStart) {
+  if (autoFit !== false && deliveryDate && isValidDateString(deliveryDate) && deliveryDate > bomStart) {
     const totalTargetDays = getDaysDifference(bomStart, deliveryDate) + 1;
     if (totalTargetDays >= BOM_STAGE_KEYS.length) {
       const matIdx = BOM_STAGE_KEYS.indexOf('material_receipt');
@@ -657,7 +658,7 @@ export function buildTemplateSchedule(params: {
   const { template, materials, startDate, lineId, targetEndDate, corbEndDate } = params;
 
   let durations = (template?.milestoneDurations || []).filter(m => Boolean(m.milestoneKey));
-  
+
   if (durations.length === 0 || !durations.some(m => m.milestoneKey === 'po_from_customer')) {
     durations = [
       { milestoneKey: 'po_from_customer', milestoneName: '1. Customer Purchase Order (PO)', durationDays: 1 },
@@ -870,7 +871,7 @@ export function recalculateProductLine(
         varianceDays = inheritedDelay;
       } else {
         // For active or completed milestones, variance is measured against the committed baseline end date
-        varianceDays = effEnd > ms.committedBaselineEndDate 
+        varianceDays = effEnd > ms.committedBaselineEndDate
           ? Math.max(1, getDaysDifference(ms.committedBaselineEndDate, effEnd))
           : getDaysDifference(ms.committedBaselineEndDate, effEnd);
       }
@@ -1183,7 +1184,7 @@ export function getMilestoneRevisedDates(
   if (isActivelyStartedOrInProgress && ms.forecastEndDate && (!baselineEnd || ms.forecastEndDate > baselineEnd)) {
     targetEnd = ms.forecastEndDate;
   }
-  
+
   if (addedDelayHere > 0 && revisedStart) {
     const candidateWithAdded = addDays(revisedStart, baselineDuration + addedDelayHere - 1);
     if (!targetEnd || candidateWithAdded > targetEnd) {

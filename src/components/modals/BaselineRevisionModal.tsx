@@ -29,6 +29,9 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
 
   const [reason, setReason] = useState<string>('');
   const [flowMode, setFlowMode] = useState<'recommended' | 'custom'>('recommended');
+  const [planningMode, setPlanningMode] = useState<'auto_fit' | 'manual'>('auto_fit');
+  const [overrunAcknowledged, setOverrunAcknowledged] = useState<boolean>(false);
+  const [overrunNote, setOverrunNote] = useState<string>('');
   const [baselineStartDate, setBaselineStartDate] = useState<string>(today);
   const [durationChanges, setDurationChanges] = useState<{ [key: string]: number }>({});
   const [masterDurations, setMasterDurations] = useState<{ [key: string]: number }>({});
@@ -49,6 +52,9 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
     const initialStart = corbEndDate;
     setReason('');
     setFlowMode('recommended');
+    setPlanningMode('auto_fit');
+    setOverrunAcknowledged(false);
+    setOverrunNote('');
     setBaselineStartDate(initialStart);
     setError(null);
 
@@ -103,6 +109,10 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
 
   const handleMasterDurationChange = (milestoneKey: string, val: number) => {
     const clampedVal = Math.max(1, val);
+    // If PM manually modifies duration, seamlessly switch to manual planning mode
+    if (planningMode === 'auto_fit') {
+      setPlanningMode('manual');
+    }
     setMasterDurations(prev => ({
       ...prev,
       [milestoneKey]: clampedVal
@@ -129,6 +139,40 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
 
   const nextRevNum = (po.revisions || []).length;
 
+  const isManualMode = planningMode === 'manual';
+
+  // Calculate master schedule from BOM release as per last date (complete) of CORB and delivery date
+  const { milestones: masterScheduleRaw, calculatedDeliveryDate: masterCalculatedDeliveryDate } = calculateMilestonesFromBOM({
+    milestones: line1?.milestones || [],
+    poDate: po.poDate || today,
+    corbEndDate: baselineStartDate || corbEndDate,
+    deliveryDate: po.committedDeliveryDate,
+    materials: line1?.materials,
+    customDurations: masterDurations,
+    autoFit: !isManualMode
+  });
+
+  const masterSchedule = masterScheduleRaw
+    .filter(ms => ms.key !== 'po_from_customer' && ms.key !== 'corb_release')
+    .map((ms, index) => ({
+      ...ms,
+      index,
+      durationDays: masterDurations[ms.key] !== undefined ? masterDurations[ms.key] : ms.committedDurationDays,
+      startDate: ms.committedBaselineStartDate,
+      endDate: ms.committedBaselineEndDate
+    }));
+
+  const targetDeliveryDate = po.committedDeliveryDate;
+  const isDateExceeded = Boolean(
+    targetDeliveryDate &&
+    masterCalculatedDeliveryDate &&
+    masterCalculatedDeliveryDate > targetDeliveryDate
+  );
+  const overrunDays = isDateExceeded ? (
+    Math.max(0, Math.round((new Date(masterCalculatedDeliveryDate).getTime() - new Date(targetDeliveryDate).getTime()) / (1000 * 60 * 60 * 24)))
+  ) : 0;
+  const isScheduleOverrun = isDateExceeded;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -141,6 +185,17 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
     if (flowAlreadyStarted) {
       setError('Cannot revise baseline after actual work has started. Update milestones through the production modules.');
       return;
+    }
+
+    if (isScheduleOverrun) {
+      if (!overrunAcknowledged) {
+        setError(`Manual planned schedule exceeds committed delivery date by +${overrunDays} days. Please acknowledge the overrun and provide a brief note of what happened to proceed.`);
+        return;
+      }
+      if (!overrunNote.trim() && !reason.trim()) {
+        setError('Please enter a brief note explaining why the planned schedule exceeds the delivery date.');
+        return;
+      }
     }
 
     if (flowMode === 'custom') {
@@ -174,13 +229,26 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
       });
     });
 
+    let finalReason = reason.trim();
+    if (isScheduleOverrun) {
+      const notePart = overrunNote.trim() || 'Schedule overrun accepted by PM';
+      const tag = `[Manual Plan Overrun: +${overrunDays}d past ${targetDeliveryDate} - ${notePart}]`;
+      finalReason = finalReason ? `${finalReason} | ${tag}` : tag;
+    }
+    if (!finalReason) {
+      finalReason = isInitialApproval
+        ? 'Single Master Baseline reviewed and approved for all products.'
+        : `Master Baseline re-revised (Rev ${nextRevNum}).`;
+    }
+
     const res = addBaselineRevision({
       poId: po.id,
-      reason: reason.trim() || (isInitialApproval ? 'Single Master Baseline reviewed and approved for all products.' : `Master Baseline re-revised (Rev ${nextRevNum}).`),
+      reason: finalReason,
       docRef: `BL-REV-${nextRevNum}-${today.replace(/-/g, '')}`,
       user: `${activeRole} User`,
       baselineStartDate,
       changes: changesList,
+      autoFit: !isManualMode,
       milestoneFlows: flowMode === 'custom'
         ? po.productLines.map(line => ({ lineId: line.id, milestones: customFlows[line.id] || [] }))
         : undefined
@@ -193,36 +261,18 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
     }
   };
 
-  // Master representative milestone list (taken from line 1 or longest line)
-  const masterMilestones = po.productLines[0]?.milestones || [];
-
-  // Calculate master schedule from BOM release as per last date (complete) of CORB and delivery date
-  const { milestones: masterScheduleRaw, calculatedDeliveryDate: masterCalculatedDeliveryDate } = calculateMilestonesFromBOM({
-    milestones: line1?.milestones || [],
-    poDate: po.poDate || today,
-    corbEndDate: baselineStartDate || corbEndDate,
-    deliveryDate: po.committedDeliveryDate,
-    materials: line1?.materials,
-    customDurations: masterDurations
-  });
-
-  const masterSchedule = masterScheduleRaw
-    .filter(ms => ms.key !== 'po_from_customer' && ms.key !== 'corb_release')
-    .map((ms, index) => ({
-      ...ms,
-      index,
-      durationDays: masterDurations[ms.key] !== undefined ? masterDurations[ms.key] : ms.committedDurationDays,
-      startDate: ms.committedBaselineStartDate,
-      endDate: ms.committedBaselineEndDate
-    }));
-
   const handleAutoFitToDelivery = () => {
+    setPlanningMode('auto_fit');
+    setOverrunAcknowledged(false);
+    setOverrunNote('');
+
     const { milestones: fitted } = calculateMilestonesFromBOM({
       milestones: line1?.milestones || [],
       poDate: po.poDate || today,
       corbEndDate: baselineStartDate || corbEndDate,
       deliveryDate: po.committedDeliveryDate,
-      materials: line1?.materials
+      materials: line1?.materials,
+      autoFit: true
     });
 
     const nextMaster: Record<string, number> = {};
@@ -385,6 +435,14 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
               <p className="text-[9px] text-slate-500 mt-1 font-mono">
                 {masterCalculatedDeliveryDate === po.committedDeliveryDate ? '✅ Aligned with contract delivery' : `Target: ${po.committedDeliveryDate}`}
               </p>
+              {masterCalculatedDeliveryDate > po.committedDeliveryDate && (
+                <div className="mt-1.5 p-1.5 bg-amber-50 border border-amber-300 rounded text-[10px] text-amber-900 flex items-center gap-1 font-sans">
+                  <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span>
+                    <strong>Baseline Change Note:</strong> Exceeds delivery target by <strong>+{Math.max(0, Math.round((new Date(masterCalculatedDeliveryDate).getTime() - new Date(po.committedDeliveryDate).getTime()) / 864e5))}d</strong>.
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -435,22 +493,44 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
           {/* MASTER BASELINE VIEW (CLEAN & NON-CLUMSY) */}
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-cyan-600" /> Master Baseline Schedule (Planned from BOM &rarr; Delivery)
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">Anchored on CORB completion date ({corbEndDate || 'Pending'}). Sales and CORB stages are excluded from baseline planning.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAutoFitToDelivery}
-                    disabled={flowAlreadyStarted}
-                    className="text-xs font-mono font-bold text-cyan-800 bg-white hover:bg-cyan-50 border border-cyan-300 px-2.5 py-1 rounded-lg cursor-pointer transition-colors shadow-2xs"
-                  >
-                    Auto-Fit to {po.committedDeliveryDate}
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Planning Mode Selector: Auto-Fit (Default) vs Manual Planning (Custom Days) */}
+                  <div className="inline-flex bg-slate-200/80 p-0.5 rounded-lg border border-slate-300 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={handleAutoFitToDelivery}
+                      disabled={flowAlreadyStarted}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        planningMode === 'auto_fit'
+                          ? 'bg-cyan-800 text-white shadow-2xs'
+                          : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                      title="Default: Proportions milestone durations to automatically fit within the contractual delivery date"
+                    >
+                      <span>🪄 Auto-Fit Delivery</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlanningMode('manual')}
+                      disabled={flowAlreadyStarted}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        planningMode === 'manual'
+                          ? 'bg-cyan-800 text-white shadow-2xs'
+                          : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                      title="Manual mode: Specify exact days for milestones without auto-fitting. Warns if exceeding delivery date."
+                    >
+                      <span>✍️ Manual Creation</span>
+                    </button>
+                  </div>
+
                   <span className="text-xs font-mono font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-1 rounded-lg">
                     Total: {masterSchedule.reduce((acc, m) => acc + m.durationDays, 0)} Days
                   </span>
@@ -517,7 +597,14 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                             {ms.startDate}
                           </td>
                           <td className="py-2.5 px-4 font-mono font-bold text-emerald-700 text-[11px]">
-                            {ms.endDate}
+                            <div className="flex items-center gap-1.5">
+                              <span>{ms.endDate}</span>
+                              {ms.key === 'shipment' && ms.endDate > po.committedDeliveryDate && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300" title="Milestone exceeds committed delivery date">
+                                  +{Math.max(0, Math.round((new Date(ms.endDate).getTime() - new Date(po.committedDeliveryDate).getTime()) / 864e5))}d vs Delivery
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -526,6 +613,60 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                 </table>
               </div>
             </div>
+
+            {/* SCHEDULE OVERRUN WARNING & PROCEED NOTE BOX */}
+            {isScheduleOverrun && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-3 shadow-xs animate-in fade-in duration-150">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-amber-950 text-xs">
+                        Planned Schedule Exceeds Committed Delivery Date (+{overrunDays} Days Overrun)
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                        Overrun Notice
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-900 mt-1">
+                      Your manually specified milestone durations sum to <strong className="font-mono">{masterSchedule.reduce((acc, m) => acc + m.durationDays, 0)} days</strong>, setting the planned delivery date to <strong className="font-mono text-amber-950 font-bold">{masterCalculatedDeliveryDate}</strong>. This exceeds the committed delivery date (<strong className="font-mono">{po.committedDeliveryDate}</strong>) by <strong className="font-mono text-rose-800 font-extrabold">+{overrunDays} days</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/95 border border-amber-200 rounded-lg p-3 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={overrunAcknowledged}
+                      onChange={(e) => setOverrunAcknowledged(e.target.checked)}
+                      className="w-4 h-4 rounded text-cyan-700 focus:ring-cyan-600 border-slate-300 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-amber-950">
+                      I acknowledge this planned schedule exceeds the committed delivery date (+{overrunDays}d) and agree to proceed.
+                    </span>
+                  </label>
+
+                  {overrunAcknowledged && (
+                    <div className="pt-2 border-t border-amber-200/80 space-y-1">
+                      <label className="block text-[11px] font-bold text-amber-900">
+                        Note of what happened / Reason for overrun: <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={overrunNote}
+                        onChange={(e) => setOverrunNote(e.target.value)}
+                        placeholder="e.g., Raw material procurement lead time 35d, customer approved extended timeline, scope change..."
+                        className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-cyan-600"
+                      />
+                      <p className="text-[10px] text-amber-700 italic">
+                        This note will be recorded permanently in the baseline revision history log.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* SYNCHRONIZED PRODUCTS SUMMARY CARD */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
@@ -547,7 +688,8 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                     corbEndDate: baselineStartDate || corbEndDate,
                     deliveryDate: po.committedDeliveryDate,
                     materials: line.materials,
-                    customDurations: masterDurations
+                    customDurations: masterDurations,
+                    autoFit: !isManualMode
                   });
 
                   return (
@@ -593,9 +735,9 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
             {!flowAlreadyStarted && (
               <button
                 type="submit"
-                disabled={isInitialApproval && !allLinesCorbCompleted}
+                disabled={(isInitialApproval && !allLinesCorbCompleted) || (isScheduleOverrun && (!overrunAcknowledged || (!overrunNote.trim() && !reason.trim())))}
                 className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors ${
-                  (isInitialApproval && !allLinesCorbCompleted)
+                  (isInitialApproval && !allLinesCorbCompleted) || (isScheduleOverrun && (!overrunAcknowledged || (!overrunNote.trim() && !reason.trim())))
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70'
                     : 'bg-cyan-800 hover:bg-cyan-900 text-white cursor-pointer'
                 }`}
@@ -603,11 +745,15 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                 {isInitialApproval ? (
                   !allLinesCorbCompleted ? (
                     <><Clock className="w-4 h-4 text-slate-400" /> Awaiting Stage 2 (CORB Release) Completion</>
+                  ) : isScheduleOverrun && (!overrunAcknowledged || (!overrunNote.trim() && !reason.trim())) ? (
+                    <><AlertTriangle className="w-4 h-4 text-amber-500" /> Acknowledge +{overrunDays}d Overrun &amp; Add Note to Proceed</>
                   ) : (
-                    <><CheckCircle2 className="w-4 h-4 text-cyan-200" /> Lock Master Baseline & Release Order</>
+                    <><CheckCircle2 className="w-4 h-4 text-cyan-200" /> Lock Master Baseline{isScheduleOverrun ? ` (+${overrunDays}d Noted)` : ' & Release Order'}</>
                   )
+                ) : isScheduleOverrun && (!overrunAcknowledged || (!overrunNote.trim() && !reason.trim())) ? (
+                  <><AlertTriangle className="w-4 h-4 text-amber-500" /> Acknowledge +{overrunDays}d Overrun &amp; Add Note to Proceed</>
                 ) : (
-                  <><RefreshCw className="w-4 h-4 text-cyan-200" /> Save Master Re-Baseline Rev {nextRevNum}</>
+                  <><RefreshCw className="w-4 h-4 text-cyan-200" /> Save Master Re-Baseline Rev {nextRevNum}{isScheduleOverrun ? ` (+${overrunDays}d Noted)` : ''}</>
                 )}
               </button>
             )}
