@@ -14,10 +14,12 @@ import {
   BarChart2,
   PieChart,
   Layers,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { getPOManufacturingStatus } from '../../utils/statusUtils';
 import { getDaysDifference } from '../../services/calculationEngine';
+import { extractDelayFlow } from '../common/DelayAnalysisFlow';
 import type { PurchaseOrder, Role } from '../../types';
 
 interface YearlyCompletedOrdersReportProps {
@@ -298,44 +300,38 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
   // Alias for backward compatibility
   const getCompletionYear = getOrderStartYear;
 
-  // Helper to extract 100% accurate net delay days for an order from system delivery records
+  // Directly use the order's current approved baseline and delay logs as they are
   const getPOEffectiveDelay = (po: PurchaseOrder): number => {
-    const summary = getPOManufacturingStatus(po);
     const compDate = getCompletionDate(po);
-    const contractDiff = (po.committedDeliveryDate && compDate && compDate > po.committedDeliveryDate)
-      ? getDaysDifference(po.committedDeliveryDate, compDate)
+    const currentBaseline = po.revisedDeliveryDate || po.committedDeliveryDate;
+    const currentBaselineDiff = (currentBaseline && compDate && compDate > currentBaseline)
+      ? getDaysDifference(currentBaseline, compDate)
       : 0;
-    return Math.max(0, summary.delayDays, contractDiff);
-  };
+    const delayLog = extractDelayFlow(po);
+    const summary = getPOManufacturingStatus(po);
 
-  // Days of mid-flow delay that were absorbed/recovered before final delivery
-  // (same per-milestone rule as MilestoneModuleView / DeliveryDispatchModule)
-  const getPORecoveredDays = (po: PurchaseOrder): number => {
-    let recovered = 0;
-    for (const line of po.productLines || []) {
-      const sorted = [...(line.milestones || [])].sort((a, b) => a.stageOrder - b.stageOrder);
-      for (let i = 0; i < sorted.length; i++) {
-        const ms = sorted[i];
-        const isDone = ms.status === 'Completed' || Boolean(ms.actualEndDate);
-        if (!isDone) continue;
-        const varOf = (m: typeof ms) => Math.max(0, typeof m.varianceDays === 'number' ? m.varianceDays : 0);
-        const currVar = varOf(ms);
-        const prevVar = i > 0 ? varOf(sorted[i - 1]) : 0;
-        recovered += Math.max(0, prevVar - currVar);
-      }
+    // If delivered on or before the current baseline and delay logs show no net delay:
+    if (currentBaseline && compDate && compDate <= currentBaseline && delayLog.netVarianceDays <= 0) {
+      return 0;
     }
-    return recovered;
+
+    return Math.max(0, delayLog.netVarianceDays, currentBaselineDiff, summary.delayDays);
   };
 
-  // Helper to extract the primary bottleneck stage for an order (strictly dynamic from actual system records)
+  // Recovered delay days directly from the order's milestone delay logs
+  const getPORecoveredDays = (po: PurchaseOrder): number => {
+    const delayLog = extractDelayFlow(po);
+    return delayLog.totalDaysRecovered;
+  };
+
+  // Extract bottleneck stage directly from the order's delay logs as it is
   const getPOBottleneckInfo = (po: PurchaseOrder) => {
     const effDelay = getPOEffectiveDelay(po);
-    const recDays = getPORecoveredDays(po);
+    const delayLog = extractDelayFlow(po);
+    const recDays = delayLog.totalDaysRecovered;
     const summary = getPOManufacturingStatus(po);
 
-    // If the order has NO net delay and NO recovered delay (e.g. PO-QE-8802):
-    // It was strictly on schedule; no delay occurred or was recorded anywhere.
-    if (effDelay <= 0 && recDays <= 0) {
+    if (effDelay <= 0 && recDays <= 0 && !delayLog.hasDelays && !delayLog.hasHistoricalDelays) {
       return {
         stageName: '—',
         delayDays: 0,
@@ -345,51 +341,15 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       };
     }
 
-    // For orders that experienced delay or recovered delay, find the actual causing stage from system milestones
-    let bottleneckStage: string | null = null;
-    let maxDelta = 0;
-    let maxVar = 0;
-    let stageReason: string | undefined = undefined;
-
-    (po.productLines || []).forEach(line => {
-      const sorted = [...(line.milestones || [])].sort((a, b) => a.stageOrder - b.stageOrder);
-      for (let i = 0; i < sorted.length; i++) {
-        const ms = sorted[i];
-        const prev = i > 0 ? sorted[i - 1] : null;
-        const v = typeof ms.varianceDays === 'number' && ms.varianceDays > 0 ? ms.varianceDays : 0;
-        const prevV = prev && typeof prev.varianceDays === 'number' && prev.varianceDays > 0 ? prev.varianceDays : 0;
-        const delta = Math.max(0, v - prevV);
-        const reason = (ms.delayReason && !ms.delayReason.startsWith('Inherited') && !ms.delayReason.startsWith('Cascaded'))
-          ? ms.delayReason
-          : undefined;
-
-        if (delta > maxDelta) {
-          maxDelta = delta;
-          maxVar = v;
-          bottleneckStage = ms.name;
-          stageReason = reason;
-        } else if (delta === maxDelta && v > maxVar) {
-          maxVar = v;
-          bottleneckStage = ms.name;
-          if (reason) stageReason = reason;
-        } else if (!bottleneckStage && (v > 0 || reason)) {
-          bottleneckStage = ms.name;
-          stageReason = reason;
-        }
-      }
-    });
-
-    // Fallback to summary.delayedStageName if available
-    if (!bottleneckStage && summary.delayedStageName && summary.delayedStageName !== '14. Final Shipment & Dispatch') {
-      bottleneckStage = summary.delayedStageName;
-      stageReason = summary.delayReason;
-    }
+    // Use root delay step directly from the order's delay logs as it is
+    const rootStep = delayLog.rootDelayStep;
+    let bottleneckStage = rootStep?.stageName || summary.delayedStageName;
+    let stageReason = rootStep?.delayReason || summary.delayReason;
 
     if (!bottleneckStage && effDelay > 0) {
       bottleneckStage = '14. Final Shipment & Dispatch';
     }
 
-    // Normalize to standard stage name if matched
     if (bottleneckStage) {
       const matched = CIRCOR_STANDARD_STAGES.find(s =>
         bottleneckStage?.toLowerCase().includes(s.name.toLowerCase()) ||
@@ -399,7 +359,9 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       if (matched) bottleneckStage = matched.name;
     }
 
-    const delayDays = effDelay > 0 ? effDelay : (maxDelta > 0 ? maxDelta : (maxVar > 0 ? maxVar : recDays));
+    const delayDays = effDelay > 0
+      ? effDelay
+      : (rootStep?.stageDelayAdded && rootStep.stageDelayAdded > 0 ? rootStep.stageDelayAdded : (recDays || 1));
 
     return {
       stageName: bottleneckStage || '7. Material Receipt (GRN)',
@@ -407,7 +369,7 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       reason: stageReason,
       hasBottleneck: true,
       isDelayed: effDelay > 0,
-      isResolved: effDelay <= 0 && recDays > 0
+      isResolved: effDelay <= 0 && (recDays > 0 || delayLog.isRecovered)
     };
   };
 
@@ -443,6 +405,7 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
   const [searchQuery, setSearchQuery] = useState('');
   const [actionViewMode, setActionViewMode] = useState<'matrix' | 'cards'>('matrix');
   const [stageSearch, setStageSearch] = useState('');
+  const [previewPO, setPreviewPO] = useState<PurchaseOrder | null>(null);
 
   // Orders for chosen year
   const yearOrders = useMemo(() => {
@@ -566,96 +529,66 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
         if (delay > maxDelay) maxDelay = delay;
       }
 
-      // Track stage deltas & root causes for this order
-      // Collect per-stage max delta across the PO's product lines to avoid artificial duplication on multi-line POs
-      const poStageDeltaMap: Record<string, { delta: number; reasons: string[]; category?: string }> = {};
-
       (po.productLines || []).forEach(line => {
         totalUnits += (line.qty || 1);
-        const sortedMilestones = [...(line.milestones || [])].sort((a, b) => a.stageOrder - b.stageOrder);
-        
-        for (let i = 0; i < sortedMilestones.length; i++) {
-          const ms = sortedMilestones[i];
-          const prev = i > 0 ? sortedMilestones[i - 1] : null;
-
-          const currVar = Math.max(
-            0,
-            typeof ms.varianceDays === 'number' ? ms.varianceDays : 0,
-            (ms.actualEndDate && ms.committedBaselineEndDate && ms.actualEndDate > ms.committedBaselineEndDate)
-              ? getDaysDifference(ms.committedBaselineEndDate, ms.actualEndDate)
-              : 0
-          );
-
-          const prevVar = prev
-            ? Math.max(
-                0,
-                typeof prev.varianceDays === 'number' ? prev.varianceDays : 0,
-                (prev.actualEndDate && prev.committedBaselineEndDate && prev.actualEndDate > prev.committedBaselineEndDate)
-                  ? getDaysDifference(prev.committedBaselineEndDate, prev.actualEndDate)
-                  : 0
-              )
-            : 0;
-
-          const delta = Math.max(0, currVar - prevVar);
-
-          let k = ms.key;
-          if (k === 'baseline_review' || k === 'planning' || k === 'baseline') k = 'pm_baseline';
-          else if (k === 'raw_material' || k === 'incoming_inspection' || k === 'stores_inward' || k === 'material') k = 'material_receipt';
-          else if (k === 'production' || k === 'production_assembly') k = 'assembly';
-          else if (k === 'fabrication' || k === 'production_machining') k = 'machining';
-          else if (k === 'qc_pass' || k === 'quality_check' || k === 'fg_inspection') k = 'fg';
-          else if (k === 'dispatch' || k === 'delivery' || k === 'shipping') k = 'shipment';
-          else if (k === 'procurement' || k === 'supplier_po') k = 'sub_supplier_po';
-          else if (k === 'client_inspection' || k === 'third_party_inspection') k = 'customer_inspection';
-          else if (k === 'coating') k = 'painting';
-          else if (k === 'dispatch_clearance' || k === 'test_report') k = 'trn';
-          else if (k === 'corb') k = 'corb_release';
-          else if (k === 'bom' || k === 'engineering') k = 'bom_release';
-          else if (k === 'wo' || k === 'work_order') k = 'wo_release';
-
-          // Fallback to stageOrder if key is custom or unmapped
-          if (!stageDelayMap[k] && ms.stageOrder >= 1 && ms.stageOrder <= 14) {
-            const mapped = CIRCOR_STANDARD_STAGES.find(s => s.order === ms.stageOrder);
-            if (mapped) k = mapped.key;
-          }
-
-          if (stageDelayMap[k] && delta > 0) {
-            if (!poStageDeltaMap[k]) {
-              poStageDeltaMap[k] = { delta: 0, reasons: [] };
-            }
-            if (delta > poStageDeltaMap[k].delta) {
-              poStageDeltaMap[k].delta = delta;
-            }
-            if (ms.delayReason && !ms.delayReason.startsWith('Inherited') && !ms.delayReason.startsWith('Cascaded')) {
-              poStageDeltaMap[k].reasons.push(ms.delayReason);
-            }
-            if (ms.delayCategory) {
-              poStageDeltaMap[k].category = ms.delayCategory;
-            }
-          }
-        }
       });
 
+      // Track stage deltas & root causes directly from the order's delay logs as it is
+      const delayLog = extractDelayFlow(po);
+      const poCapturedStages = new Set<string>();
       let poCapturedDelta = 0;
-      Object.entries(poStageDeltaMap).forEach(([stageKey, data]) => {
-        const stageEntry = stageDelayMap[stageKey];
-        if (stageEntry && data.delta > 0) {
-          stageEntry.totalDays += data.delta;
-          stageEntry.orders += 1;
-          poCapturedDelta += data.delta;
-          data.reasons.forEach(r => stageEntry.reasons.add(r));
+
+      const originSteps = delayLog.allDelayOriginSteps?.length > 0
+        ? delayLog.allDelayOriginSteps
+        : delayLog.delaySteps.filter(s => !s.isRecovery && s.stageDelayAdded > 0);
+
+      originSteps.forEach(step => {
+        let k = step.stageKey;
+        if (k === 'baseline_review' || k === 'planning' || k === 'baseline') k = 'pm_baseline';
+        else if (k === 'raw_material' || k === 'incoming_inspection' || k === 'stores_inward' || k === 'material') k = 'material_receipt';
+        else if (k === 'production' || k === 'production_assembly') k = 'assembly';
+        else if (k === 'fabrication' || k === 'production_machining') k = 'machining';
+        else if (k === 'qc_pass' || k === 'quality_check' || k === 'fg_inspection') k = 'fg';
+        else if (k === 'dispatch' || k === 'delivery' || k === 'shipping') k = 'shipment';
+        else if (k === 'procurement' || k === 'supplier_po') k = 'sub_supplier_po';
+        else if (k === 'client_inspection' || k === 'third_party_inspection') k = 'customer_inspection';
+        else if (k === 'coating') k = 'painting';
+        else if (k === 'dispatch_clearance' || k === 'test_report') k = 'trn';
+        else if (k === 'corb') k = 'corb_release';
+        else if (k === 'bom' || k === 'engineering') k = 'bom_release';
+        else if (k === 'wo' || k === 'work_order') k = 'wo_release';
+
+        // Fallback to stageOrder if key is custom or unmapped
+        if (!stageDelayMap[k] && step.stageOrder >= 1 && step.stageOrder <= 14) {
+          const mapped = CIRCOR_STANDARD_STAGES.find(s => s.order === step.stageOrder);
+          if (mapped) k = mapped.key;
+        }
+
+        const stageEntry = stageDelayMap[k];
+        const addedDays = step.stageDelayAdded > 0 ? step.stageDelayAdded : (step.delayDays || 0);
+
+        if (stageEntry && addedDays > 0) {
+          stageEntry.totalDays += addedDays;
+          if (!poCapturedStages.has(k)) {
+            stageEntry.orders += 1;
+            poCapturedStages.add(k);
+          }
+          poCapturedDelta += addedDays;
+          if (step.delayReason && !step.delayReason.startsWith('Inherited') && !step.delayReason.startsWith('Cascaded')) {
+            stageEntry.reasons.add(step.delayReason);
+          }
           stageEntry.impactedPOs.push({
             poNumber: po.poNumber,
             customerName: po.customerName,
-            delayDays: data.delta,
-            reason: data.reasons[0]
+            delayDays: addedDays,
+            reason: step.delayReason
           });
 
-          const cat = data.category || stageEntry.category;
-          if (cat === 'Supplier') supplierDelayDays += data.delta;
-          else if (cat === 'Customer') customerDelayDays += data.delta;
-          else if (cat === 'Engineering' || cat === 'Design') engineeringDelayDays += data.delta;
-          else productionDelayDays += data.delta;
+          const cat = step.delayCategory || stageEntry.category;
+          if (cat === 'Supplier') supplierDelayDays += addedDays;
+          else if (cat === 'Customer') customerDelayDays += addedDays;
+          else if (cat === 'Engineering' || cat === 'Design') engineeringDelayDays += addedDays;
+          else productionDelayDays += addedDays;
         }
       });
 
@@ -698,7 +631,7 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
         const shipmentEntry = stageDelayMap['shipment'];
         if (shipmentEntry) {
           shipmentEntry.totalDays += remainingDelay;
-          if (!poStageDeltaMap['shipment']) {
+          if (!poCapturedStages.has('shipment')) {
             shipmentEntry.orders += 1;
           }
           shipmentEntry.impactedPOs.push({
@@ -829,36 +762,259 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
     });
   }, [yearOrders, statusFilter, searchQuery]);
 
-  // Export CSV (respects the currently visible filters — status + search)
-  const handleExportCSV = () => {
-    if (filteredOrders.length === 0) return;
-    const headers = ['PO Number', 'Customer', 'Product', 'Booked Amount ($)', 'Start Date', 'Delivered Date', 'Variance (Days)', 'Status', 'Bottleneck Stage'];
-    const rows = filteredOrders.map(po => {
-      const line = po.productLines[0];
-      const effDelay = getPOEffectiveDelay(po);
-      const bInfo = getPOBottleneckInfo(po);
-      const bottleneckExport = bInfo.hasBottleneck
-        ? `${bInfo.stageName}${bInfo.isDelayed ? ` (+${bInfo.delayDays}d)` : ''}`
-        : 'None';
-      return [
-        `"${po.poNumber}"`,
-        `"${po.customerName.replace(/"/g, '""')}"`,
-        `"${(line?.productName || '').replace(/"/g, '""')}"`,
-        po.bookedAmount || 0,
-        `"${getOrderStartDate(po)}"`,
-        `"${getCompletionDate(po)}"`,
-        effDelay,
-        effDelay > 0 ? '"Delayed"' : '"On-Time"',
-        `"${bottleneckExport.replace(/"/g, '""')}"`
-      ].join(',');
-    });
-    const blob = new Blob(['\uFEFF' + [headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Completed_Orders_Report_${selectedYear}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Export individual single order PDF with full baseline schedule, delay logs, milestones, and product lines
+  const handleExportSingleOrderPDF = (po: PurchaseOrder) => {
+    const compDate = getCompletionDate(po);
+    const startDate = getOrderStartDate(po);
+    const effDelay = getPOEffectiveDelay(po);
+    const isDelayed = effDelay > 0;
+    const bottleneck = getPOBottleneckInfo(po);
+    const recDays = getPORecoveredDays(po);
+    const booked = typeof po.bookedAmount === 'number' && !isNaN(po.bookedAmount) ? po.bookedAmount : 0;
+    const delayLog = extractDelayFlow(po);
+    const currentBaseline = po.revisedDeliveryDate || po.committedDeliveryDate;
+    const revCount = po.revisions?.length || 0;
+    const generatedAt = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
+
+    // Milestone rows across the primary product line
+    const line = po.productLines[0];
+    const milestones = line?.milestones || [];
+
+    const milestoneRows = milestones.map((ms, idx) => {
+      const step = delayLog.delaySteps.find(s => s.stageKey === ms.key || s.stageOrder === ms.stageOrder);
+      const isRecovery = step?.isRecovery;
+      const delayAdded = step?.stageDelayAdded || 0;
+      const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
+      const cleanName = (ms.name || '').replace(/^\d+\.\s*/, '');
+
+      let varianceBadge = '<span style="color:#64748b;font-weight:600;">0d</span>';
+      if (varDays > 0) {
+        varianceBadge = `<span style="color:#be123c;font-weight:700;">+${varDays}d</span>`;
+      } else if (varDays < 0) {
+        varianceBadge = `<span style="color:#059669;font-weight:700;">${varDays}d</span>`;
+      }
+
+      let impactBadge = '—';
+      if (delayAdded > 0) {
+        impactBadge = `<span style="background:#ffe4e6;color:#9f1239;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">+${delayAdded}d delay</span>`;
+      } else if (delayAdded < 0) {
+        impactBadge = `<span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">${delayAdded}d resolved</span>`;
+      }
+
+      const reason = ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—'));
+      const cat = ms.delayCategory || step?.delayCategory || '—';
+
+      return `<tr style="font-size:9.5px;border-bottom:1px solid #f1f5f9;background:${idx % 2 === 0 ? '#ffffff' : '#fcfcfd'};">
+        <td style="padding:5px 8px;font-weight:700;color:#334155;">${ms.stageOrder || idx + 1}. ${cleanName}</td>
+        <td style="padding:5px 8px;font-family:monospace;color:#475569;">${ms.committedBaselineStartDate || '—'} → ${ms.committedBaselineEndDate || '—'}</td>
+        <td style="padding:5px 8px;font-family:monospace;color:#0f172a;font-weight:600;">${ms.currentBaselineEndDate || ms.committedBaselineEndDate || '—'}</td>
+        <td style="padding:5px 8px;font-family:monospace;color:${ms.actualEndDate ? '#0f172a' : '#64748b'};">${ms.actualStartDate || '—'} → ${ms.actualEndDate || (ms.status === 'Completed' ? 'Done' : '—')}</td>
+        <td style="padding:5px 8px;text-align:center;">${varianceBadge}</td>
+        <td style="padding:5px 8px;text-align:center;">${impactBadge}</td>
+        <td style="padding:5px 8px;color:#475569;">${reason}</td>
+        <td style="padding:5px 8px;color:#64748b;font-size:9px;">${cat}</td>
+      </tr>`;
+    }).join('');
+
+    // Revisions table if any revisions exist
+    const revisionsHTML = (po.revisions && po.revisions.length > 0)
+      ? `<div style="margin-top:12px;">
+          <h3 style="font-size:11px;font-weight:800;color:#0f172a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Approved Baseline Revisions (${po.revisions.length})</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:9.5px;">
+            <thead><tr style="background:#f8fafc;color:#475569;font-weight:700;border-bottom:1px solid #e2e8f0;">
+              <th style="padding:4px 8px;text-align:left;">Rev #</th>
+              <th style="padding:4px 8px;text-align:left;">Approved By</th>
+              <th style="padding:4px 8px;text-align:left;">Date</th>
+              <th style="padding:4px 8px;text-align:left;">Doc Ref</th>
+              <th style="padding:4px 8px;text-align:left;">Reason</th>
+            </tr></thead>
+            <tbody>
+              ${po.revisions.map((rev, rIdx) => `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                  <td style="padding:4px 8px;font-weight:700;">Rev ${rev.revNumber ?? rIdx}</td>
+                  <td style="padding:4px 8px;">${rev.approvedBy || 'Project Manager'}</td>
+                  <td style="padding:4px 8px;font-family:monospace;">${rev.approvedAt ? rev.approvedAt.slice(0, 10) : '—'}</td>
+                  <td style="padding:4px 8px;font-family:monospace;">${rev.docRef || '—'}</td>
+                  <td style="padding:4px 8px;">${rev.reason || 'Baseline schedule update'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`
+      : '';
+
+    // Product lines summary
+    const productLinesHTML = po.productLines.map((pl, idx) => `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:800;color:#0f172a;font-size:11px;">${pl.lineNumber || `LINE-${idx + 1}`}: ${pl.productName}</div>
+          <div style="font-size:9px;color:#64748b;margin-top:2px;">Design: <strong>${pl.designType || 'Existing Design'}</strong> · Qty: <strong>${pl.qty || 1} units</strong> · Category: ${pl.category || 'Standard'}</div>
+        </div>
+        <div style="text-align:right;">
+          <span style="font-size:10px;font-weight:700;font-family:monospace;${(pl.overallVarianceDays || 0) > 0 ? 'color:#be123c;' : 'color:#059669;'}">
+            Variance: ${(pl.overallVarianceDays || 0) > 0 ? `+${pl.overallVarianceDays}d` : `${pl.overallVarianceDays || 0}d`}
+          </span>
+        </div>
+      </div>
+    `).join('');
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Order Report — ${po.poNumber}</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; background: #fff; font-size: 10px; line-height: 1.4; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 3px solid #059669; margin-bottom: 14px; }
+  .title { font-size: 18px; font-weight: 900; color: #0f172a; }
+  .subtitle { font-size: 10px; color: #64748b; margin-top: 2px; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 10px; }
+  .card-label { font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card-val { font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 5px 8px; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.5px; background: #f1f5f9; color: #475569; border-bottom: 1px solid #cbd5e1; }
+  .footer { text-align: center; font-size: 8px; color: #94a3b8; padding-top: 10px; border-top: 1px solid #e2e8f0; margin-top: 14px; }
+  @media print {
+    .no-print { display: none !important; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print" style="position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:99999;">
+  <button onclick="window.print()" style="background:#059669;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Save as PDF / Print</button>
+  <button onclick="window.close()" style="background:#64748b;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Close</button>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="title">${po.poNumber}</div>
+      <span class="badge" style="${isDelayed ? 'background:#ffe4e6;color:#9f1239;border:1px solid #fda4af;' : 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;'}">
+        ${isDelayed ? `+${effDelay}d Delayed` : 'Delivered On-Time'}
+      </span>
+      ${po.isClosed ? '<span class="badge" style="background:#e2e8f0;color:#334155;">Closed & Archived</span>' : ''}
+    </div>
+    <div class="subtitle">
+      Customer: <strong style="color:#0f172a;">${po.customerName}</strong> · PO Ref: <span style="font-family:monospace;">${po.customerPoRef || '—'}</span> · Contract Review: <span style="font-family:monospace;">${po.contractReviewRef || '—'}</span>
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-weight:800;color:#059669;font-size:11px;">ORDER COMPLETION DOSSIER</div>
+    <div style="font-size:9px;color:#64748b;">Generated: ${generatedAt}</div>
+    ${booked > 0 ? `<div style="font-size:13px;font-weight:900;color:#0f172a;margin-top:2px;">${formatUSD(booked)}</div>` : ''}
+  </div>
+</div>
+
+<!-- BASELINE VS ACTUAL SCHEDULE COMPARISON -->
+<div class="grid-4">
+  <div class="card">
+    <div class="card-label">Order Start Date</div>
+    <div class="card-val" style="font-family:monospace;">${startDate}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Original Baseline Date</div>
+    <div class="card-val" style="font-family:monospace;">${po.committedDeliveryDate || '—'}</div>
+  </div>
+  <div class="card" style="border-color:#bbf7d0;background:#f0fdf4;">
+    <div class="card-label" style="color:#166534;">Current Approved Baseline${revCount > 0 ? ` (Rev ${revCount - 1})` : ''}</div>
+    <div class="card-val" style="font-family:monospace;color:#166534;">${currentBaseline || '—'}</div>
+  </div>
+  <div class="card" style="${isDelayed ? 'border-color:#fecdd3;background:#fff1f2;' : 'border-color:#bbf7d0;background:#f0fdf4;'}">
+    <div class="card-label" style="${isDelayed ? 'color:#9f1239;' : 'color:#166534;'}">Actual Delivery Date</div>
+    <div class="card-val" style="font-family:monospace;${isDelayed ? 'color:#be123c;' : 'color:#166534;'}">${compDate || '—'}</div>
+  </div>
+</div>
+
+<!-- DELAY & BOTTLENECK SUMMARY BANNER -->
+<div style="display:grid;grid-template-columns:${bottleneck.hasBottleneck ? '1.5fr 1fr' : '1fr'};gap:8px;margin-bottom:12px;">
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;">
+    <div style="font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:2px;">Delivery Schedule Performance</div>
+    <div style="font-size:11px;font-weight:700;color:#0f172a;">
+      ${isDelayed
+        ? `Delivered late with +${effDelay} days overrun against baseline schedule.`
+        : (recDays > 0
+          ? `Delivered 100% on schedule — resolved +${recDays} days of mid-flow delays before final delivery.`
+          : 'Delivered 100% on schedule with zero milestone variance.')
+      }
+    </div>
+    <div style="font-size:9px;color:#64748b;margin-top:2px;">
+      Total delay events logged: <strong>${delayLog.delaySteps.length}</strong> · Net variance: <strong>${delayLog.netVarianceDays}d</strong> · Total recovered: <strong>${delayLog.totalDaysRecovered}d</strong>
+    </div>
+  </div>
+
+  ${bottleneck.hasBottleneck ? `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;">
+      <div style="font-size:8px;font-weight:700;color:#c2410c;text-transform:uppercase;margin-bottom:2px;">Primary Bottleneck Stage</div>
+      <div style="font-size:11px;font-weight:800;color:#9a3412;">
+        ${bottleneck.stageName} ${bottleneck.isDelayed ? `(+${bottleneck.delayDays}d)` : ''}
+      </div>
+      <div style="font-size:9px;color:#7c2d12;margin-top:2px;">
+        Reason: <strong>${bottleneck.reason || 'Schedule overrun at this stage'}</strong>
+      </div>
+    </div>
+  ` : ''}
+</div>
+
+<!-- PRODUCT LINES -->
+<div style="margin-bottom:12px;">
+  <h3 style="font-size:10px;font-weight:800;color:#0f172a;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Product Lines in PO (${po.productLines.length})</h3>
+  ${productLinesHTML}
+</div>
+
+<!-- 14-STAGE MANUFACTURING & DELAY LOG LEDGER -->
+<div>
+  <h3 style="font-size:10px;font-weight:800;color:#0f172a;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">14-Stage Milestone Baseline &amp; Delay Log Ledger</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:24%;">Milestone Stage</th>
+        <th style="width:17%;">Original Baseline</th>
+        <th style="width:11%;">Current Target</th>
+        <th style="width:17%;">Actual Dates</th>
+        <th style="width:6%;text-align:center;">Var</th>
+        <th style="width:10%;text-align:center;">Delay Log</th>
+        <th style="width:10%;">Logged Reason</th>
+        <th style="width:5%;">Category</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${milestoneRows}
+    </tbody>
+  </table>
+</div>
+
+${revisionsHTML}
+
+${po.closureNotes ? `
+  <div style="margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;">
+    <div style="font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;">PO Closure Notes</div>
+    <div style="font-size:10px;color:#0f172a;margin-top:2px;font-style:italic;">"${po.closureNotes}"</div>
+  </div>
+` : ''}
+
+<div class="footer">
+  PO ${po.poNumber} Completion &amp; Baseline Performance Report · CIRCOR E2E Tracker · Generated on ${generatedAt}
+</div>
+
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 500);
+    }
   };
 
   // Max value for the Bottleneck SVG Bar Chart
@@ -919,15 +1075,6 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
               );
             })}
           </div>
-
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 border border-slate-200 shadow-xs"
-            title="Download CSV report"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span>Export CSV</span>
-          </button>
         </div>
       </div>
 
@@ -1845,7 +1992,11 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
                         {getOrderStartDate(po)}
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-700">
-                        {compDate}
+                        <div>{compDate}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          Target: {po.revisedDeliveryDate || po.committedDeliveryDate}
+                          {po.revisions && po.revisions.length > 0 ? ` (Rev ${po.revisions.length - 1})` : ''}
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-mono text-center">
                         {isDelayed ? (
@@ -1883,15 +2034,26 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {onSelectPO && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => onSelectPO(po)}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors inline-flex items-center gap-1"
-                            title="View PO details"
+                            type="button"
+                            onClick={() => setPreviewPO(po)}
+                            className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title={`Preview and Export PDF for ${po.poNumber}`}
                           >
-                            <Eye className="w-3.5 h-3.5 text-slate-500" /> View
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View PDF</span>
                           </button>
-                        )}
+                          {onSelectPO && (
+                            <button
+                              onClick={() => onSelectPO(po)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors inline-flex items-center gap-1"
+                              title="View PO details"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-slate-500" /> View
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1903,6 +2065,302 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
       </div>
         </div>
       )}
+
+      {/* PDF DOSSIER VIEW / PREVIEW MODAL */}
+      {previewPO && (() => {
+        const pEffDelay = getPOEffectiveDelay(previewPO);
+        const pIsDelayed = pEffDelay > 0;
+        const pBottleneck = getPOBottleneckInfo(previewPO);
+        const pRecDays = getPORecoveredDays(previewPO);
+        const pBooked = typeof previewPO.bookedAmount === 'number' && !isNaN(previewPO.bookedAmount) ? previewPO.bookedAmount : 0;
+        const pFlow = extractDelayFlow(previewPO);
+        const pBase = previewPO.revisedDeliveryDate || previewPO.committedDeliveryDate || '—';
+        const pStart = getOrderStartDate(previewPO);
+        const pComp = getCompletionDate(previewPO);
+        const pLine = previewPO.productLines[0];
+        const pMilestones = pLine?.milestones || [];
+        const pRevs = previewPO.revisions || [];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-slate-100 rounded-2xl shadow-2xl border border-slate-300 max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              
+              {/* Modal Top Toolbar */}
+              <div className="p-4 bg-white border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-black text-slate-900">
+                        PO Completion Dossier Preview: {previewPO.poNumber}
+                      </h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        pIsDelayed ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {pIsDelayed ? `+${pEffDelay}d Late` : 'Delivered On-Time'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Customer: <strong className="text-slate-800">{previewPO.customerName}</strong> · Review baseline dates &amp; milestone delay logs before downloading
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleExportSingleOrderPDF(previewPO)}
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                    title="Download formatted PDF or Print"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download as PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPO(null)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                    title="Close Preview"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Scrollable Body: A4 Sheet Simulation */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200/50">
+                <div className="mx-auto max-w-4xl w-full bg-white border border-slate-300 rounded-2xl shadow-xl p-6 sm:p-8 text-slate-800 space-y-6 text-xs">
+                  
+                  {/* Sheet Header */}
+                  <div className="flex justify-between items-start pb-4 border-b-2 border-emerald-600">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-black text-slate-900">{previewPO.poNumber}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          pIsDelayed ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {pIsDelayed ? `+${pEffDelay}d Delayed` : 'Delivered On-Time'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Customer: <strong className="text-slate-900">{previewPO.customerName}</strong> · PO Ref: <span className="font-mono">{previewPO.customerPoRef || '—'}</span> · Contract Review: <span className="font-mono">{previewPO.contractReviewRef || '—'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-extrabold text-emerald-700 text-xs uppercase tracking-wider">CIRCOR E2E TRACKER</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Order Completion Dossier</div>
+                      {pBooked > 0 && (
+                        <div className="text-sm font-black text-slate-900 mt-1 font-mono">{formatCurrency(pBooked)}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4-KPI Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Order Start Date</div>
+                      <div className="text-sm font-mono font-bold text-slate-900 mt-0.5">{pStart}</div>
+                    </div>
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Original Baseline</div>
+                      <div className="text-sm font-mono font-bold text-slate-900 mt-0.5">{previewPO.committedDeliveryDate || '—'}</div>
+                    </div>
+                    <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg">
+                      <div className="text-[10px] font-bold text-emerald-800 uppercase">Current Baseline{pRevs.length > 0 ? ` (Rev ${pRevs.length - 1})` : ''}</div>
+                      <div className="text-sm font-mono font-bold text-emerald-900 mt-0.5">{pBase}</div>
+                    </div>
+                    <div className={`p-3 rounded-lg border ${pIsDelayed ? 'bg-rose-50/60 border-rose-200' : 'bg-emerald-50/60 border-emerald-200'}`}>
+                      <div className={`text-[10px] font-bold uppercase ${pIsDelayed ? 'text-rose-800' : 'text-emerald-800'}`}>
+                        {pIsDelayed ? 'Actual Delivery' : 'Delivered Date'}
+                      </div>
+                      <div className={`text-sm font-mono font-bold mt-0.5 ${pIsDelayed ? 'text-rose-900' : 'text-emerald-900'}`}>
+                        {pComp}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schedule Performance & Bottlenecks */}
+                  <div className={`grid gap-3 ${pBottleneck.hasBottleneck ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Schedule Performance</div>
+                      <div className="text-xs font-bold text-slate-900 mt-1">
+                        {pIsDelayed
+                          ? `Delivered late with +${pEffDelay} days overrun against baseline.`
+                          : pRecDays > 0
+                          ? `Delivered on schedule — recovered +${pRecDays}d of mid-flow delay.`
+                          : 'Delivered 100% on schedule with zero milestone variance.'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        Delay Events: <strong>{pFlow.delaySteps.length}</strong> · Net Variance: <strong>{pFlow.netVarianceDays}d</strong> · Resolved: <strong>{pFlow.totalDaysRecovered}d</strong>
+                      </div>
+                    </div>
+                    {pBottleneck.hasBottleneck && (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg">
+                        <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Primary Bottleneck Stage</div>
+                        <div className="text-xs font-bold text-amber-950 mt-1">
+                          {pBottleneck.stageName} {pBottleneck.isDelayed ? `(+${pBottleneck.delayDays}d)` : ''}
+                        </div>
+                        <div className="text-[11px] text-amber-800 mt-1">
+                          Cause: <strong>{pBottleneck.reason || 'Schedule overrun at this stage'}</strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Lines */}
+                  <div>
+                    <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider mb-2">
+                      Product Lines ({previewPO.productLines.length})
+                    </h4>
+                    <div className="space-y-1.5">
+                      {previewPO.productLines.map((pl, idx) => (
+                        <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-slate-900 text-xs">{pl.lineNumber || `LINE-${idx+1}`}: {pl.productName}</div>
+                            <div className="text-[10px] text-slate-500">Design: {pl.designType || 'Existing Design'} · Qty: {pl.qty || 1} units · Category: {pl.category || 'Standard'}</div>
+                          </div>
+                          <span className={`font-mono font-bold text-xs ${(pl.overallVarianceDays || 0) > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                            {(pl.overallVarianceDays || 0) > 0 ? `+${pl.overallVarianceDays}d` : `${pl.overallVarianceDays || 0}d`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 14-Stage Milestone Baseline & Delay Ledger */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                        14-Stage Milestone Baseline &amp; Delay Ledger
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">14 CIRCOR Standard Milestones</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
+                      <table className="w-full min-w-[760px] text-left text-[11px] border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold uppercase text-[9px]">
+                            <th className="p-2.5 whitespace-nowrap">Stage</th>
+                            <th className="p-2.5 whitespace-nowrap">Original Baseline</th>
+                            <th className="p-2.5 whitespace-nowrap">Current Target</th>
+                            <th className="p-2.5 whitespace-nowrap">Actual Dates</th>
+                            <th className="p-2.5 text-center whitespace-nowrap">Var</th>
+                            <th className="p-2.5 text-center whitespace-nowrap">Delay Impact</th>
+                            <th className="p-2.5 whitespace-nowrap">Logged Reason</th>
+                            <th className="p-2.5 whitespace-nowrap">Category</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {pMilestones.map((ms, idx) => {
+                            const step = pFlow.delaySteps.find(s => s.stageKey === ms.key || s.stageOrder === ms.stageOrder);
+                            const delayAdded = step?.stageDelayAdded || 0;
+                            const varDays = typeof ms.varianceDays === 'number' ? ms.varianceDays : 0;
+                            const reason = ms.delayReason || step?.delayReason || (delayAdded > 0 ? 'Schedule overrun' : (delayAdded < 0 ? 'Time recovered' : '—'));
+                            const cat = ms.delayCategory || step?.delayCategory || '—';
+                            const cleanStageName = (ms.name || '').replace(/^\d+\.\s*/, '');
+
+                            return (
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">{ms.stageOrder || idx+1}. {cleanStageName}</td>
+                                <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">{ms.committedBaselineStartDate || '—'} → {ms.committedBaselineEndDate || '—'}</td>
+                                <td className="p-2.5 font-mono font-semibold text-slate-900 whitespace-nowrap">{ms.currentBaselineEndDate || ms.committedBaselineEndDate || '—'}</td>
+                                <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{ms.actualStartDate || '—'} → {ms.actualEndDate || (ms.status === 'Completed' ? 'Done' : '—')}</td>
+                                <td className="p-2.5 text-center font-bold whitespace-nowrap">
+                                  {varDays > 0 ? <span className="text-rose-700">+{varDays}d</span> : varDays < 0 ? <span className="text-emerald-700">{varDays}d</span> : <span className="text-slate-400">0d</span>}
+                                </td>
+                                <td className="p-2.5 text-center whitespace-nowrap">
+                                  {delayAdded > 0 ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">+{delayAdded}d delay</span>
+                                  ) : delayAdded < 0 ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">{delayAdded}d resolved</span>
+                                  ) : <span className="text-slate-400">—</span>}
+                                </td>
+                                <td className="p-2.5 text-slate-600 max-w-[160px] truncate" title={reason}>{reason}</td>
+                                <td className="p-2.5 text-slate-400 font-mono text-[10px] whitespace-nowrap">{cat}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Approved Revisions (if any) */}
+                  {pRevs.length > 0 && (
+                    <div>
+                      <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider mb-2">
+                        Approved Baseline Revisions ({pRevs.length})
+                      </h4>
+                      <table className="w-full text-left text-[11px] border border-slate-200 rounded-lg overflow-hidden">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-600 font-bold uppercase text-[9px]">
+                            <th className="p-2">Rev #</th>
+                            <th className="p-2">Approved By</th>
+                            <th className="p-2">Date</th>
+                            <th className="p-2">Doc Ref</th>
+                            <th className="p-2">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {pRevs.map((rev, rIdx) => (
+                            <tr key={rIdx}>
+                              <td className="p-2 font-bold text-slate-800">Rev {rev.revNumber ?? rIdx}</td>
+                              <td className="p-2 text-slate-700">{rev.approvedBy || 'Project Manager'}</td>
+                              <td className="p-2 font-mono text-slate-600">{rev.approvedAt ? rev.approvedAt.slice(0, 10) : '—'}</td>
+                              <td className="p-2 font-mono text-slate-600">{rev.docRef || '—'}</td>
+                              <td className="p-2 text-slate-600">{rev.reason || 'Baseline schedule update'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Closure Notes */}
+                  {previewPO.closureNotes && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">PO Closure Notes</div>
+                      <div className="text-xs text-slate-800 italic mt-0.5">"{previewPO.closureNotes}"</div>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="text-center text-[10px] text-slate-400 pt-4 border-t border-slate-200 font-mono">
+                    PO {previewPO.poNumber} Completion &amp; Baseline Performance Dossier · CIRCOR E2E Tracker
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Modal Bottom Action Bar */}
+              <div className="p-3.5 bg-white border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
+                <span className="text-slate-500 font-mono text-[11px]">
+                  Ready to print or save as PDF. Click "Download as PDF" to generate the document.
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPO(null)}
+                    className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportSingleOrderPDF(previewPO)}
+                    className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download as PDF</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
