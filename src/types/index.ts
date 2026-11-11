@@ -12,6 +12,7 @@ export type Role =
   | 'QC (FG)'
   | 'QC (Customer Inspection)'
   | 'QC (Painting)'
+  | 'QC (IRN)'
   | 'QC (TRN)'
   | 'Stores (Shipment)';
 
@@ -203,6 +204,7 @@ export const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
   'QC (FG)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['fg'] },
   'QC (Customer Inspection)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['customer_inspection'] },
   'QC (Painting)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['painting'] },
+  'QC (IRN)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['trn'] },
   'QC (TRN)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['trn'] },
   'Stores (Shipment)': { ...defaultSlotPerms, canEditDispatch: true, allowedMilestones: ['shipment', 'dispatch', 'delivery'] }
 };

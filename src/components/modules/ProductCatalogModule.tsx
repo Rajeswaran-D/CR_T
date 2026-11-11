@@ -647,7 +647,7 @@ export const ProductCatalogModule: React.FC = () => {
         </div>
       </div>
       <p className="text-[10px] text-slate-600">
-        Formula: <span className="font-semibold text-rose-800">{maxMatLeadDays}d (Material GRN)</span> + <span className="font-semibold text-blue-800">{manufacturingDays}d (Machining, Assembly, QC, Painting, TRN, Dispatch)</span> = <span className="font-bold text-emerald-900">{calculatedTotalDays} Days</span> baseline duration.
+        Formula: <span className="font-semibold text-rose-800">{maxMatLeadDays}d (Material GRN)</span> + <span className="font-semibold text-blue-800">{manufacturingDays}d (Machining, Assembly, QC, Painting, IRN, Dispatch)</span> = <span className="font-bold text-emerald-900">{calculatedTotalDays} Days</span> baseline duration.
       </p>
     </div>
   );
@@ -941,7 +941,7 @@ export const ProductCatalogModule: React.FC = () => {
                     <span className="text-slate-500 font-bold text-xs shrink-0">Days</span>
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    Machining, Assembly, QC, Painting, TRN & Dispatch time after raw material receipt.
+                    Machining, Assembly, QC, Painting, IRN & Dispatch time after raw material receipt.
                   </div>
                 </div>
 
@@ -1133,7 +1133,7 @@ export const ProductCatalogModule: React.FC = () => {
                     <span className="text-slate-500 font-bold text-xs shrink-0">Days</span>
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    Machining, Assembly, QC, Painting, TRN & Dispatch time after raw material receipt.
+                    Machining, Assembly, QC, Painting, IRN & Dispatch time after raw material receipt.
                   </div>
                 </div>
 

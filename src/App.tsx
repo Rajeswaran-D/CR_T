@@ -63,7 +63,8 @@ const MainAppContent: React.FC = () => {
         'QC (FG)':                      '10. Finished Goods (FG)',
         'QC (Customer Inspection)':     '11. Customer Inspection',
         'QC (Painting)':                '12. Painting',
-        'QC (TRN)':                     '13. TRN',
+        'QC (IRN)':                     '13. IRN',
+        'QC (TRN)':                     '13. IRN',
         'Stores (Shipment)':            '14. Final Shipment & Dispatch',
         'Project Management':           'Administration & Governance'
       };
@@ -166,8 +167,8 @@ const MainAppContent: React.FC = () => {
           {activeModule === "12. Painting" && (
             <MilestoneModuleView stageKey="painting" stageTitle="12. Painting" stageOrder={12} responsibleRole="QC (Painting)" description="Perform industrial coating, surface finish thickness checks (DFT), and painting quality approval." />
           )}
-          {activeModule === "13. TRN" && (
-            <MilestoneModuleView stageKey="trn" stageTitle="13. TRN" stageOrder={13} responsibleRole="QC (TRN)" description="Issue Test & Release Note (TRN), QA final release dossier, and shipping clearance certificates." />
+          {activeModule === "13. IRN" && (
+            <MilestoneModuleView stageKey="trn" stageTitle="13. IRN" stageOrder={13} responsibleRole="QC (IRN)" description="Issue Inspection Release Note (IRN), QA final release dossier, and shipping clearance certificates." />
           )}
           {activeModule === "14. Final Shipment & Dispatch" && (
             <MilestoneModuleView 

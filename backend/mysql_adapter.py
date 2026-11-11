@@ -36,6 +36,7 @@ CANONICAL_STAGE_ORDER = {
     "customer_inspection": 11,
     "painting": 12,
     "trn": 13,
+    "irn": 13,
     "shipment": 14,
 }
 
@@ -55,7 +56,8 @@ CANONICAL_STAGE_NAMES = {
     "qc_pass": "10. FG",
     "customer_inspection": "11. Customer Inspection",
     "painting": "12. Painting",
-    "trn": "13. TRN",
+    "trn": "13. IRN",
+    "irn": "13. IRN",
     "shipment": "14. Final Shipment & Dispatch",
 }
 

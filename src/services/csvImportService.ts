@@ -35,7 +35,7 @@ export const STANDARD_STAGES_IMPORT_MAP = [
   { stage: 10, key: 'fg', name: '10. FG', colHeader: 'S10_FG_Actual', defaultDays: 2 },
   { stage: 11, key: 'customer_inspection', name: '11. Customer Inspection', colHeader: 'S11_Inspection_Actual', defaultDays: 2 },
   { stage: 12, key: 'painting', name: '12. Painting', colHeader: 'S12_Painting_Actual', defaultDays: 2 },
-  { stage: 13, key: 'trn', name: '13. TRN', colHeader: 'S13_TRN_Actual', defaultDays: 1 },
+  { stage: 13, key: 'trn', name: '13. IRN', colHeader: 'S13_TRN_Actual', defaultDays: 1 },
   { stage: 14, key: 'shipment', name: '14. Final Shipment & Dispatch', colHeader: 'S14_Shipment_Actual', defaultDays: 5 }
 ];
 
@@ -63,7 +63,7 @@ export const STAGE_ACTUAL_ALIASES: Record<number, string[]> = {
   10: ['FG Actual', 'Finished Goods Actual', 'FG Date', 'Finished Goods', 'FG Complete', 'FG'],
   11: ['Customer Inspection Actual', 'Customer Inspection Date', 'Inspection Actual', 'Customer Inspection', 'Inspection Complete', 'Inspection'],
   12: ['Painting Actual', 'Painting Date', 'Painting Complete', 'Painting'],
-  13: ['TRN Actual', 'TRN Date', 'Test Report Notice', 'TRN Complete', 'TRN'],
+  13: ['IRN Actual', 'IRN Date', 'Inspection Release Note', 'IRN Complete', 'IRN', 'TRN Actual', 'TRN Date', 'Test Report Notice', 'TRN Complete', 'TRN'],
   14: ['Packing & Dispatch Actual', 'Packing & Dispatch Date', 'Packing / Shipping Actual', 'Final Shipment & Dispatch Actual', 'Shipment Actual', 'Dispatch Actual', 'Packing & Dispatch', 'Packing / Shipping', 'Shipment Date', 'Dispatch Date', 'Customer Delivery Actual', 'Customer Delivery Date']
 };
 
@@ -82,7 +82,7 @@ export const STAGE_PLANNED_ALIASES: Record<number, string[]> = {
   10: ['S10_FG_Planned', 'FG Planned', 'Finished Goods Planned', 'FG Target'],
   11: ['S11_Inspection_Planned', 'Customer Inspection Planned', 'Inspection Planned', 'Customer Inspection Target'],
   12: ['S12_Painting_Planned', 'Painting Planned', 'Painting Plan', 'Painting Target'],
-  13: ['S13_TRN_Planned', 'TRN Planned', 'Test Report Notice Planned', 'TRN Target'],
+  13: ['S13_IRN_Planned', 'IRN Planned', 'Inspection Release Note Planned', 'IRN Target', 'S13_TRN_Planned', 'TRN Planned', 'Test Report Notice Planned', 'TRN Target'],
   14: ['S14_Shipment_Planned', 'Packing & Dispatch Planned', 'Packing & Dispatch Plan', 'Packing / Shipping Planned', 'Packing / Shipping Plan', 'Shipment Planned', 'Dispatch Planned', 'Final Shipment Planned', 'Target Delivery Date', 'Promised Date', 'COTD', 'Customer Delivery Planned', 'Customer Delivery Target', 'Customer Delivery Date', 'Customer Delivery']
 };
 
@@ -99,7 +99,7 @@ export const STAGE_DELAY_ALIASES: Record<number, string[]> = {
   10: ['S10_FG_Delay', 'FG Delay', 'Finished Goods Delay'],
   11: ['S11_Inspection_Delay', 'Customer Inspection Delay', 'Inspection Delay'],
   12: ['S12_Painting_Delay', 'Painting Delay'],
-  13: ['S13_TRN_Delay', 'TRN Delay'],
+  13: ['S13_IRN_Delay', 'IRN Delay', 'S13_TRN_Delay', 'TRN Delay'],
   14: ['S14_Shipment_Delay', 'Packing & Dispatch Delay', 'Packing / Shipping Delay', 'Shipment Delay', 'Dispatch Delay']
 };
 
@@ -421,7 +421,7 @@ export function applyStatusBridge(
     return isNegated ? current : maxIndex;
   }
   if (has(/\bpacking\b|\bpacked\b/)) return advance(12);       // Stage 14 active
-  if (has(/\btrn\b|\btest\s+report\b/)) return advance(11);    // Stage 13 active
+  if (has(/\b(irn|trn)\b|\b(inspection\s+release|test\s+report)\b/)) return advance(11);    // Stage 13 active
   if (has(/\bpainting\b|\bpainted\b/)) return advance(10);      // Stage 12 active
   if (has(/\binspection\b|\binspected\b/)) return advance(9);   // Stage 11 active
   if (has(/\bassembly\b|\bassembling\b/)) return advance(7);    // stages 0..7 done
@@ -817,7 +817,7 @@ function normalizeHeader(raw: string): string {
  * apart from a data row, so a customer or product called "Scope" cannot be mistaken
  * for a header row and shift every subsequent row out of alignment.
  */
-const HEADER_LABEL_PATTERN = /^(project\s*(no|number)|po\s*(no|number|date|ref)|order\s*(no|date)|customer|client|scope|product|description|item|qty|quantity|nos|price|value|amount|booked|delivery|cotd|promised|planned|actual|delay|status|remarks?|date|design|category|incoterm|corb|bom|machining|assembly|painting|trn|fg|inspection|dispatch|shipment|material)/i;
+const HEADER_LABEL_PATTERN = /^(project\s*(no|number)|po\s*(no|number|date|ref)|order\s*(no|date)|customer|client|scope|product|description|item|qty|quantity|nos|price|value|amount|booked|delivery|cotd|promised|planned|actual|delay|status|remarks?|date|design|category|incoterm|corb|bom|machining|assembly|painting|irn|trn|fg|inspection|dispatch|shipment|material)/i;
 
 /**
  * Computes a strictly chronological, contiguous baseline schedule respecting all explicit planned dates from Excel

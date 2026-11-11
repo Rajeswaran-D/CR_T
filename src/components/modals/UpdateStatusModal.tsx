@@ -93,7 +93,7 @@ export const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({
     { key: 'fg',                    name: '10. Finished Goods (FG)' },
     { key: 'customer_inspection',   name: '11. Customer Inspection' },
     { key: 'painting',              name: '12. Painting' },
-    { key: 'trn',                   name: '13. TRN' },
+    { key: 'trn',                   name: '13. IRN' },
     { key: 'shipment',              name: '14. Final Shipment & Dispatch' },
   ];
 

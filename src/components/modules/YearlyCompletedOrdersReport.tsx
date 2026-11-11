@@ -176,11 +176,11 @@ const CIRCOR_STANDARD_STAGES: ManufacturingStageDef[] = [
   {
     key: 'trn',
     order: 13,
-    name: '13. TRN',
+    name: '13. IRN',
     category: 'Documentation',
     primaryCause: 'Compiling manufacturer test certificates and inspection dossiers',
     improvementTip: 'Digitally compile test documents in real time at each stage instead of at the end',
-    responsibleRole: 'QC (TRN)'
+    responsibleRole: 'QC (IRN)'
   },
   {
     key: 'shipment',
@@ -553,7 +553,7 @@ export const YearlyCompletedOrdersReport: React.FC<YearlyCompletedOrdersReportPr
         else if (k === 'procurement' || k === 'supplier_po') k = 'sub_supplier_po';
         else if (k === 'client_inspection' || k === 'third_party_inspection') k = 'customer_inspection';
         else if (k === 'coating') k = 'painting';
-        else if (k === 'dispatch_clearance' || k === 'test_report') k = 'trn';
+        else if (k === 'dispatch_clearance' || k === 'test_report' || k === 'irn' || k === 'inspection_release') k = 'trn';
         else if (k === 'corb') k = 'corb_release';
         else if (k === 'bom' || k === 'engineering') k = 'bom_release';
         else if (k === 'wo' || k === 'work_order') k = 'wo_release';

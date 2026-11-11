@@ -108,7 +108,7 @@ const build14Milestones = (startDate: string): Milestone[] => {
     { key: 'fg', name: 'FG Inspection', dur: 2 },
     { key: 'customer_inspection', name: 'Customer Inspection', dur: 3 },
     { key: 'painting', name: 'Painting', dur: 3 },
-    { key: 'trn', name: 'TRN Clearance', dur: 2 },
+    { key: 'trn', name: 'IRN Clearance', dur: 2 },
     { key: 'shipment', name: 'Shipment', dur: 3 }
   ];
 
@@ -408,6 +408,7 @@ assert(poStatusAfterFullCompletion.completedStagesCount >= 14, 'getPOManufacturi
 const isAuthorizedRole = (role: string) => role === 'Project Management' || role === 'Project Manager (PM Baseline)';
 assert(!isAuthorizedRole('Stores (Shipment)'), 'Stores (Shipment) role is strictly blocked from closing orders');
 assert(!isAuthorizedRole('Sales / AE (Customer PO)'), 'Sales / AE role is strictly blocked from closing orders');
+assert(!isAuthorizedRole('QC (IRN)'), 'QC (IRN) role is strictly blocked from closing orders');
 assert(!isAuthorizedRole('QC (TRN)'), 'QC (TRN) role is strictly blocked from closing orders');
 assert(isAuthorizedRole('Project Manager (PM Baseline)'), 'Project Manager (PM Baseline) is authorized to formally close orders');
 assert(isAuthorizedRole('Project Management'), 'Project Management (Admin) is authorized to formally close orders');

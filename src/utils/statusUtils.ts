@@ -285,7 +285,8 @@ export function getStageFriendlyName(key: string, _line?: any): string {
     case 'qc_pass': return '10. Finished Goods (FG)';
     case 'customer_inspection': return '11. Customer Inspection';
     case 'painting': return '12. Painting';
-    case 'trn': return '13. TRN';
+    case 'trn':
+    case 'irn': return '13. IRN';
     case 'shipment':
     case 'dispatch':
     case 'delivery': return '14. Shipment & Dispatch';

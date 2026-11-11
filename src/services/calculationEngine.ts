@@ -673,7 +673,7 @@ export function buildTemplateSchedule(params: {
       { milestoneKey: 'fg', milestoneName: '10. FG', durationDays: 2 },
       { milestoneKey: 'customer_inspection', milestoneName: '11. Customer Inspection', durationDays: 2 },
       { milestoneKey: 'painting', milestoneName: '12. Painting', durationDays: 2 },
-      { milestoneKey: 'trn', milestoneName: '13. TRN', durationDays: 1 },
+      { milestoneKey: 'trn', milestoneName: '13. IRN', durationDays: 1 },
       { milestoneKey: 'shipment', milestoneName: '14. Final Shipment & Dispatch', durationDays: 5 },
     ];
   }

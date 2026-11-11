@@ -471,7 +471,7 @@ const ALIGNED_14_STAGES = [
   { key: 'fg', name: '10. FG', durationDays: 2 },
   { key: 'customer_inspection', name: '11. Customer Inspection', durationDays: 2 },
   { key: 'painting', name: '12. Painting', durationDays: 2 },
-  { key: 'trn', name: '13. TRN', durationDays: 1 },
+  { key: 'trn', name: '13. IRN', durationDays: 1 },
   { key: 'shipment', name: '14. Final Shipment & Dispatch', durationDays: 5 },
 ];
 

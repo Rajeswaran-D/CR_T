@@ -28,7 +28,7 @@ export type ModuleType =
   | '10. Finished Goods (FG)'
   | '11. Customer Inspection'
   | '12. Painting'
-  | '13. TRN'
+  | '13. IRN'
   | '14. Final Shipment & Dispatch'
   | 'Product Catalog';
 
@@ -54,7 +54,7 @@ const ALL_ROLES: Role[] = [
   'QC (FG)',
   'QC (Customer Inspection)',
   'QC (Painting)',
-  'QC (TRN)',
+  'QC (IRN)',
   'Stores (Shipment)'
 ];
 
@@ -73,6 +73,7 @@ const ROLE_BADGE: Record<Role, string> = {
   'QC (FG)': 'bg-rose-100 text-rose-800 border-rose-300',
   'QC (Customer Inspection)': 'bg-pink-100 text-pink-800 border-pink-300',
   'QC (Painting)': 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300',
+  'QC (IRN)': 'bg-red-100 text-red-800 border-red-300',
   'QC (TRN)': 'bg-red-100 text-red-800 border-red-300',
   'Stores (Shipment)': 'bg-sky-100 text-sky-800 border-sky-300'
 };
@@ -91,7 +92,8 @@ const ROLE_RESPONSIBLE_MODULE: Record<Role, ModuleType> = {
   'QC (FG)': '10. Finished Goods (FG)',
   'QC (Customer Inspection)': '11. Customer Inspection',
   'QC (Painting)': '12. Painting',
-  'QC (TRN)': '13. TRN',
+  'QC (IRN)': '13. IRN',
+  'QC (TRN)': '13. IRN',
   'Stores (Shipment)': '14. Final Shipment & Dispatch'
 };
 
@@ -119,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: '10. Finished Goods (FG)', icon: <Factory className="w-4 h-4" />, step: '10' },
     { name: '11. Customer Inspection', icon: <Factory className="w-4 h-4" />, step: '11' },
     { name: '12. Painting', icon: <Factory className="w-4 h-4" />, step: '12' },
-    { name: '13. TRN', icon: <Factory className="w-4 h-4" />, step: '13' },
+    { name: '13. IRN', icon: <Factory className="w-4 h-4" />, step: '13' },
     {
       name: '14. Final Shipment & Dispatch',
       icon: <Truck className="w-4 h-4" />,

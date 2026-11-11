@@ -36,7 +36,7 @@ const ALL_14_STAGES = [
   { key: 'fg', label: '10. FG' },
   { key: 'customer_inspection', label: '11. Cust Insp' },
   { key: 'painting', label: '12. Painting' },
-  { key: 'trn', label: '13. TRN' },
+  { key: 'trn', label: '13. IRN' },
   { key: 'shipment', label: '14. Shipment' }
 ];
 
