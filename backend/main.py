@@ -60,6 +60,13 @@ from .security import (
     validate_template_body, mask_host, sanitize_text, is_safe_id_string,
 )
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+        sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
+    except Exception:
+        pass
+
 LOG_FILE = Path(__file__).parent.parent / "backend.log"
 
 # Multi-output logging: console + backend.log
@@ -140,7 +147,13 @@ async def _load_shared_state_snapshot(org_id: str) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup: ensure uvicorn loggers output to file and console immediately
+    for _name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        _l = logging.getLogger(_name)
+        _l.propagate = True
+        if _file_handler not in _l.handlers:
+            _l.addHandler(_file_handler)
+
     logger.info(f"[CFT Tracker] FastAPI Server starting on port {PORT}")
     if is_db_configured():
         logger.info(f"[Database] Connecting to {MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}...")
