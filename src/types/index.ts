@@ -1,4 +1,4 @@
-export type Role = 
+export type Role =
   | 'Project Management'
   | 'Sales / AE (Customer PO)'
   | 'AE (CORB Release)'
@@ -38,38 +38,38 @@ export interface Subdivision {
 
 export type DesignType = 'Existing Design' | 'New Design';
 
-export type POStatus = 
-  | 'Draft' 
-  | 'Baseline Pending' 
-  | 'In Progress' 
-  | 'At Risk' 
-  | 'Delayed' 
-  | 'Completed' 
+export type POStatus =
+  | 'Draft'
+  | 'Baseline Pending'
+  | 'In Progress'
+  | 'At Risk'
+  | 'Delayed'
+  | 'Completed'
   | 'Closed'
   | 'Cancelled';
 
-export type MilestoneStatus = 
-  | 'Not Started' 
-  | 'In Progress' 
-  | 'On Track' 
-  | 'At Risk' 
-  | 'Delayed' 
+export type MilestoneStatus =
+  | 'Not Started'
+  | 'In Progress'
+  | 'On Track'
+  | 'At Risk'
+  | 'Delayed'
   | 'Completed';
 
-export type DelayCategory = 
-  | 'Customer' 
-  | 'Supplier' 
-  | 'Design' 
-  | 'Production' 
+export type DelayCategory =
+  | 'Customer'
+  | 'Supplier'
+  | 'Design'
+  | 'Production'
   | 'Internal';
 
-export type RectificationActionType = 
-  | 'Expedite' 
-  | 'Alternate Supplier' 
-  | 'Split Shipment' 
-  | 'Parallel Review' 
-  | 'Added Shift' 
-  | 'Re-sequence' 
+export type RectificationActionType =
+  | 'Expedite'
+  | 'Alternate Supplier'
+  | 'Split Shipment'
+  | 'Parallel Review'
+  | 'Added Shift'
+  | 'Re-sequence'
   | 'Formal Baseline Change Note';
 
 export type InspectionResult = 'Passed' | 'Rejected' | 'Pending';

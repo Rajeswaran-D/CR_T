@@ -740,8 +740,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
             <button
               onClick={() => setViewMode('cards')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${viewMode === 'cards'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
             >
               <Layers className="w-3.5 h-3.5" /> PO Groups &amp; Batch
@@ -749,8 +749,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
             <button
               onClick={() => setViewMode('matrix')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${viewMode === 'matrix'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Stage Matrix Grid
@@ -830,8 +830,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <button
             onClick={() => setFilterTab('active')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${filterTab === 'active'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
           >
             Active Orders ({activePOGroups.length})
@@ -840,8 +840,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <button
             onClick={() => setFilterTab('ready')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'ready'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
               }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -851,8 +851,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <button
             onClick={() => setFilterTab('in_progress')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${filterTab === 'in_progress'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
+              ? 'bg-blue-700 text-white shadow-xs'
+              : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
               }`}
           >
             In Execution ({activePOGroups.filter(g => g.startedLines > 0).length})
@@ -861,8 +861,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <button
             onClick={() => setFilterTab('delayed')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'delayed'
-                ? 'bg-rose-700 text-white shadow-xs'
-                : 'bg-white text-rose-800 hover:bg-rose-50 border border-rose-200'
+              ? 'bg-rose-700 text-white shadow-xs'
+              : 'bg-white text-rose-800 hover:bg-rose-50 border border-rose-200'
               }`}
           >
             <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
@@ -872,8 +872,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
           <button
             onClick={() => setFilterTab('completed')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${filterTab === 'completed'
-                ? 'bg-emerald-900 text-white shadow-xs'
-                : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
+              ? 'bg-emerald-900 text-white shadow-xs'
+              : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
               }`}
           >
             <Archive className="w-3.5 h-3.5 text-slate-400" />
@@ -914,12 +914,12 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                 <div
                   key={po.id}
                   className={`bg-white border rounded-2xl shadow-xs transition-all overflow-hidden ${group.isAllCompleted
-                      ? 'border-emerald-200 bg-emerald-50/10'
-                      : hasDelayedProducts
-                        ? 'border-rose-200/80'
-                        : group.startedLines > 0
-                          ? 'border-blue-200/80'
-                          : 'border-slate-200'
+                    ? 'border-emerald-200 bg-emerald-50/10'
+                    : hasDelayedProducts
+                      ? 'border-rose-200/80'
+                      : group.startedLines > 0
+                        ? 'border-blue-200/80'
+                        : 'border-slate-200'
                     }`}
                 >
                   {/* PO Accordion Header */}
@@ -1130,14 +1130,14 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                           <div
                             key={entryKey}
                             className={`p-4 rounded-xl border transition-all ${isDone
-                                ? 'bg-emerald-50/20 border-emerald-200'
-                                : !isPrereqDone
-                                  ? 'bg-amber-50/15 border-amber-200/70'
-                                  : isStarted
-                                    ? 'bg-blue-50/20 border-blue-200'
-                                    : isNewDelayHere
-                                      ? 'bg-rose-50/20 border-rose-200'
-                                      : 'bg-slate-50/50 border-slate-200'
+                              ? 'bg-emerald-50/20 border-emerald-200'
+                              : !isPrereqDone
+                                ? 'bg-amber-50/15 border-amber-200/70'
+                                : isStarted
+                                  ? 'bg-blue-50/20 border-blue-200'
+                                  : isNewDelayHere
+                                    ? 'bg-rose-50/20 border-rose-200'
+                                    : 'bg-slate-50/50 border-slate-200'
                               }`}
                           >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -1851,14 +1851,14 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                             >
                               <span
                                 className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-mono font-bold transition-transform hover:scale-110 cursor-pointer ${isStageDone
-                                    ? 'bg-emerald-600 text-white shadow-2xs'
-                                    : isStageStarted
-                                      ? isStageDelayed
-                                        ? 'bg-blue-600 text-white ring-2 ring-rose-400'
-                                        : 'bg-blue-600 text-white ring-2 ring-blue-300'
-                                      : isStageDelayed
-                                        ? 'bg-rose-500 text-white ring-1 ring-rose-300'
-                                        : 'bg-slate-200 text-slate-500'
+                                  ? 'bg-emerald-600 text-white shadow-2xs'
+                                  : isStageStarted
+                                    ? isStageDelayed
+                                      ? 'bg-blue-600 text-white ring-2 ring-rose-400'
+                                      : 'bg-blue-600 text-white ring-2 ring-blue-300'
+                                    : isStageDelayed
+                                      ? 'bg-rose-500 text-white ring-1 ring-rose-300'
+                                      : 'bg-slate-200 text-slate-500'
                                   }`}
                                 title={`${st.label}: ${ms?.status || 'Pending'} (${ms?.actualEndDate || ms?.forecastEndDate || 'Planned'})`}
                               >
@@ -2000,8 +2000,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       <label
                         key={line.id}
                         className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${!isPrereqDone ? 'opacity-50 bg-slate-100 border-slate-200 cursor-not-allowed' :
-                            isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold' :
-                              'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                          isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold' :
+                            'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                           }`}
                       >
                         <div className="flex items-center gap-2.5">
@@ -2736,8 +2736,8 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                       disabled={isDisabled}
                       onClick={handleExecuteBatch}
                       className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${!isDisabled
-                          ? 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'
-                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         }`}
                     >
                       <CheckCircle2 className="w-4 h-4" />

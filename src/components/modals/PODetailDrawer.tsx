@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { PurchaseOrder } from '../../types';
 import { isMilestoneOwnedByRole } from '../../types';
-import { 
-  X, 
-  AlertTriangle, 
-  Lock, 
-  Package, 
-  Wrench, 
-  Play, 
+import {
+  X,
+  AlertTriangle,
+  Lock,
+  Package,
+  Wrench,
+  Play,
   CheckSquare,
   CheckCircle2,
   Edit3,
@@ -99,7 +99,7 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
     <>
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 flex justify-end">
         <div className={`w-full ${drawerView === 'matrix' ? 'max-w-5xl' : 'max-w-2xl'} bg-white border-l border-slate-200 h-full flex flex-col shadow-2xl text-slate-800 transition-all duration-200`}>
-          
+
           {/* Header */}
           <div className="bg-slate-50 p-5 border-b border-slate-200 flex items-center justify-between">
             <div>
@@ -110,35 +110,32 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                     LD
                   </span>
                 )}
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                  po.status === 'Cancelled' || po.isCancelled ? 'bg-rose-100 border-rose-300 text-rose-800' :
-                  po.isClosed ? (statusSummary.delayDays > 0 ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-800') :
-                  statusSummary.isDelayed ? 'bg-rose-50 border-rose-200 text-rose-800' :
-                  'bg-emerald-50 border-emerald-200 text-emerald-800'
-                }`}>
-                  {po.status === 'Cancelled' || po.isCancelled 
-                    ? 'CANCELLED' 
-                    : po.isClosed 
-                    ? (statusSummary.delayDays > 0 ? `COMPLETED BY DELAY OF ${statusSummary.delayDays} DAYS` : 'COMPLETED ON TIME') 
-                    : statusSummary.isDelayed 
-                    ? `DELAYED (+${statusSummary.delayDays}d)` 
-                    : 'ON TIME'}
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${po.status === 'Cancelled' || po.isCancelled ? 'bg-rose-100 border-rose-300 text-rose-800' :
+                    po.isClosed ? (statusSummary.delayDays > 0 ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-800') :
+                      statusSummary.isDelayed ? 'bg-rose-50 border-rose-200 text-rose-800' :
+                        'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  }`}>
+                  {po.status === 'Cancelled' || po.isCancelled
+                    ? 'CANCELLED'
+                    : po.isClosed
+                      ? (statusSummary.delayDays > 0 ? `COMPLETED BY DELAY OF ${statusSummary.delayDays} DAYS` : 'COMPLETED ON TIME')
+                      : statusSummary.isDelayed
+                        ? `DELAYED (+${statusSummary.delayDays}d)`
+                        : 'ON TIME'}
                 </span>
                 {po.productLines && po.productLines.length > 1 && (
                   <div className="flex bg-slate-200 p-0.5 rounded-lg text-xs ml-1">
                     <button
                       onClick={() => setDrawerView('timeline')}
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        drawerView === 'timeline' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${drawerView === 'timeline' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
                     >
                       Single Flow
                     </button>
                     <button
                       onClick={() => setDrawerView('matrix')}
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        drawerView === 'matrix' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${drawerView === 'matrix' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
                     >
                       14-Stage Matrix
                     </button>
@@ -176,11 +173,10 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
               {canClosePO && !po.isClosed && po.status !== 'Cancelled' && (
                 <button
                   onClick={() => setShowClosePrompt(true)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                    allMilestonesComplete
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${allMilestonesComplete
                       ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-md ring-2 ring-emerald-400/40 animate-pulse'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
-                  }`}
+                    }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {allMilestonesComplete ? 'Close Order (Ready)' : 'Close Order'}
@@ -190,11 +186,10 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
               {onOpenCancelModal && !po.isClosed && po.status !== 'Cancelled' && (
                 <button
                   onClick={() => onOpenCancelModal(po)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${
-                    hasPendingCancel
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${hasPendingCancel
                       ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
                       : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-                  }`}
+                    }`}
                   title={isAdmin ? 'Decide on cancellation or cancel/delete order' : 'Request order cancellation with reason'}
                 >
                   {hasPendingCancel ? (
@@ -311,11 +306,10 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
             )}
 
             {/* TIMELINE VALIDATION & SCHEDULE HEALTH CHECK STEP */}
-            <div className={`p-4 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-2xs ${
-              statusSummary.timelineValidationStatus === 'CLOSED' ? 'bg-slate-100 border-slate-300 text-slate-700' :
-              statusSummary.timelineValidationStatus === 'REQUIRES_REVISION_DELAYED' ? 'bg-rose-50 border-rose-200 text-rose-900' :
-              'bg-emerald-50/90 border-emerald-200 text-emerald-950'
-            }`}>
+            <div className={`p-4 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-2xs ${statusSummary.timelineValidationStatus === 'CLOSED' ? 'bg-slate-100 border-slate-300 text-slate-700' :
+                statusSummary.timelineValidationStatus === 'REQUIRES_REVISION_DELAYED' ? 'bg-rose-50 border-rose-200 text-rose-900' :
+                  'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+              }`}>
               <div className="flex items-center gap-2.5">
                 {statusSummary.timelineValidationStatus === 'REQUIRES_REVISION_DELAYED' ? (
                   <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
@@ -327,10 +321,10 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                     {statusSummary.timelineValidationStatus === 'CLOSED'
                       ? 'Order Status: Closed & Delivered'
                       : statusSummary.timelineValidationStatus === 'REQUIRES_REVISION_DELAYED'
-                      ? (po.status === 'Baseline Pending' ? 'Baseline Status: Approval Pending' : 'Schedule Status: Delay Recorded')
-                      : allMilestonesComplete
-                      ? 'Schedule Status: All Stages Completed'
-                      : 'Schedule Status: Validated & On Track'
+                        ? (po.status === 'Baseline Pending' ? 'Baseline Status: Approval Pending' : 'Schedule Status: Delay Recorded')
+                        : allMilestonesComplete
+                          ? 'Schedule Status: All Stages Completed'
+                          : 'Schedule Status: Validated & On Track'
                     }
                   </div>
                   <p className="text-[11px] text-slate-600 mt-0.5">{statusSummary.timelineMessage}</p>
@@ -386,13 +380,12 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                           <span className="font-bold text-slate-900 text-xs line-clamp-1" title={line.productName}>
                             #{idx + 1} {line.productName}
                           </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border ${
-                            isLineDelayed
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border ${isLineDelayed
                               ? 'bg-rose-100 border-rose-300 text-rose-800'
                               : line.status === 'Completed'
-                              ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
-                              : 'bg-slate-200 border-slate-300 text-slate-700'
-                          }`}>
+                                ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                                : 'bg-slate-200 border-slate-300 text-slate-700'
+                            }`}>
                             {isLineDelayed ? `+${line.overallVarianceDays || 3}d Delay` : line.status || 'On Track'}
                           </span>
                         </div>
@@ -481,9 +474,8 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                             </td>
 
                             <td className="py-2.5 px-2 text-center font-mono font-bold">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                                isLineDelayed ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                              }`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${isLineDelayed ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
                                 {isLineDelayed ? `+${line.overallVarianceDays || 0}d` : '0d'}
                               </span>
                             </td>
@@ -501,19 +493,18 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                               return (
                                 <td key={st.key} className="py-2 px-1 text-center">
                                   <span
-                                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-mono font-bold transition-transform hover:scale-110 ${
-                                      isStageDone
+                                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-mono font-bold transition-transform hover:scale-110 ${isStageDone
                                         ? 'bg-emerald-600 text-white shadow-2xs'
                                         : isStageStarted
-                                        ? isNewDelay
-                                          ? 'bg-blue-600 text-white ring-2 ring-rose-400'
-                                          : 'bg-blue-600 text-white ring-2 ring-blue-300'
-                                        : isNewDelay
-                                        ? 'bg-rose-500 text-white ring-1 ring-rose-300'
-                                        : hasShift
-                                        ? 'bg-slate-200 text-slate-700'
-                                        : 'bg-slate-100 text-slate-400'
-                                    }`}
+                                          ? isNewDelay
+                                            ? 'bg-blue-600 text-white ring-2 ring-rose-400'
+                                            : 'bg-blue-600 text-white ring-2 ring-blue-300'
+                                          : isNewDelay
+                                            ? 'bg-rose-500 text-white ring-1 ring-rose-300'
+                                            : hasShift
+                                              ? 'bg-slate-200 text-slate-700'
+                                              : 'bg-slate-100 text-slate-400'
+                                      }`}
                                     title={`${st.label}: ${ms?.status || 'Pending'} (${ms?.actualEndDate || ms?.forecastEndDate || 'Planned'})`}
                                   >
                                     {isStageDone ? 'Done' : isStageStarted ? 'In Prog' : isNewDelay ? 'Delay' : sIdx + 1}
@@ -553,11 +544,10 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border ${
-                        Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0)) > 0 
-                          ? 'bg-rose-50 text-rose-800 border-rose-300' 
+                      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border ${Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0)) > 0
+                          ? 'bg-rose-50 text-rose-800 border-rose-300'
                           : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                      }`}>
+                        }`}>
                         Total Delay: {Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0)) > 0 ? `+${Math.max(0, ...po.productLines.map(l => l.overallVarianceDays || 0))}d` : '0d (On Time)'}
                       </span>
                       <span className="text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 px-2.5 py-1 rounded-lg">
@@ -577,13 +567,12 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                           <button
                             key={line.id}
                             onClick={() => setSelectedLineId(line.id)}
-                            className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer border ${
-                              isSelected
+                            className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer border ${isSelected
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                                 : isLineDelayed
-                                ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
-                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                            }`}
+                                  ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              }`}
                           >
                             <span>#{pIdx + 1} {line.productName}</span>
                             {isLineDelayed && (
@@ -641,7 +630,7 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                       const recoveredDelay = isCompleted ? Math.max(0, prevVariance - currVariance) : 0;
                       const isStarted = (Boolean(ms.actualStartDate) || productLineMilestones.some(p => p.isLineStarted)) && !isCompleted;
                       const isInProgress = (isStarted || ms.status === 'In Progress') && !isCompleted;
-                      
+
                       // An order is no longer pending baseline once Stage 3 is completed or any subsequent stage has activity
                       const isBaselineDone = selectedLine.milestones.some(m =>
                         (m.key === 'pm_baseline' || m.key === 'baseline_review' || m.stageOrder === 3) &&
@@ -697,243 +686,240 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
 
                       return (
                         <React.Fragment key={ms.id}>
-                        <div className="relative flex items-start justify-between gap-4 group">
-                          
-                          {/* Node Bullet Icon */}
-                          <div className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
-                            (isCompleted || isStage1)
-                              ? 'bg-emerald-600 border-emerald-600 text-white' 
-                              : isNewDelayFormedAtThisStage 
-                              ? 'bg-rose-500 border-rose-500 text-white' 
-                              : isInProgress 
-                              ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-400/40' 
-                              : isCurrent 
-                              ? 'bg-emerald-100 border-emerald-600 text-emerald-800 ring-2 ring-emerald-400/30' 
-                              : 'bg-slate-100 border-slate-300 text-slate-400'
-                          }`}>
-                            {(isCompleted || isStage1) ? <CheckCircle2 className="w-3.5 h-3.5" /> : ms.stageOrder}
-                          </div>
+                          <div className="relative flex items-start justify-between gap-4 group">
 
-                          {/* Stage Information */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-bold ${isCurrent ? 'text-emerald-950 text-sm' : (isCompleted || isStage1) ? 'text-slate-800' : 'text-slate-600'}`}>
-                                {friendlyName}
-                              </span>
-
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                                (isCompleted || isStage1)
-                                  ? (isNewDelayFormedAtThisStage 
-                                      ? 'bg-amber-50 border-amber-300 text-amber-900' 
-                                      : currVariance > 0 
-                                      ? 'bg-slate-100 border-slate-200 text-slate-700' 
-                                      : recoveredDelay > 0
-                                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                                      : 'bg-emerald-50 border-emerald-200 text-emerald-800')
-                                  : isNewDelayFormedAtThisStage 
-                                  ? 'bg-rose-50 border-rose-200 text-rose-800 shadow-2xs font-bold'
-                                  : isInProgress 
-                                  ? 'bg-blue-50 border-blue-200 text-blue-800 shadow-2xs'
-                                  : isCurrent 
-                                  ? 'bg-emerald-100 border-emerald-300 text-emerald-800 shadow-2xs font-bold'
-                                  : hasInheritedShift
-                                  ? 'bg-slate-100 border-slate-200 text-slate-600'
-                                  : isPendingBaseline 
-                                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                                  : 'bg-slate-100 border-slate-200 text-slate-500'
+                            {/* Node Bullet Icon */}
+                            <div className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${(isCompleted || isStage1)
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : isNewDelayFormedAtThisStage
+                                  ? 'bg-rose-500 border-rose-500 text-white'
+                                  : isInProgress
+                                    ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-400/40'
+                                    : isCurrent
+                                      ? 'bg-emerald-100 border-emerald-600 text-emerald-800 ring-2 ring-emerald-400/30'
+                                      : 'bg-slate-100 border-slate-300 text-slate-400'
                               }`}>
-                                {(isCompleted || isStage1) 
-                                  ? (isNewDelayFormedAtThisStage 
-                                      ? `Completed (+${addedDelayHere}d delay added)` 
-                                      : currVariance > 0 
-                                      ? (recoveredDelay > 0 
-                                          ? `Completed (${recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved, Previous: +${currVariance}d)` 
-                                          : `Completed (Previous: +${currVariance}d)`)
-                                      : recoveredDelay > 0 
-                                      ? `Completed (${recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved)` 
-                                      : 'Completed')
-                                  : isNewDelayFormedAtThisStage 
-                                  ? `Delay (+${addedDelayHere}d)`
-                                  : isInProgress 
-                                  ? (hasInheritedShift ? `In Execution (Previous: +${currVariance}d)` : 'In Execution')
-                                  : isCurrent
-                                  ? (currVariance > 0 ? `Ready to Start (Previous: +${currVariance}d)` : 'Ready to Start')
-                                  : hasInheritedShift
-                                  ? `Previous (+${currVariance}d)`
-                                  : isPendingBaseline 
-                                  ? 'Baseline Pending'
-                                  : 'Not Started'}
-                              </span>
+                              {(isCompleted || isStage1) ? <CheckCircle2 className="w-3.5 h-3.5" /> : ms.stageOrder}
                             </div>
 
-                            <div className="mt-1.5 space-y-1.5 text-[10px] font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
-                              {ms.key === 'corb_release' ? (
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-slate-400 font-semibold uppercase">Schedule Mode:</span>{' '}
-                                    <strong className="text-cyan-800">Event-Driven (No Planned Baseline Dates)</strong>
-                                  </div>
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                    Single Completion Input
-                                  </span>
-                                </div>
-                              ) : (
-                                <>
-                                  {/* Planned Baseline row */}
+                            {/* Stage Information */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold ${isCurrent ? 'text-emerald-950 text-sm' : (isCompleted || isStage1) ? 'text-slate-800' : 'text-slate-600'}`}>
+                                  {friendlyName}
+                                </span>
+
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${(isCompleted || isStage1)
+                                    ? (isNewDelayFormedAtThisStage
+                                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                      : currVariance > 0
+                                        ? 'bg-slate-100 border-slate-200 text-slate-700'
+                                        : recoveredDelay > 0
+                                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                          : 'bg-emerald-50 border-emerald-200 text-emerald-800')
+                                    : isNewDelayFormedAtThisStage
+                                      ? 'bg-rose-50 border-rose-200 text-rose-800 shadow-2xs font-bold'
+                                      : isInProgress
+                                        ? 'bg-blue-50 border-blue-200 text-blue-800 shadow-2xs'
+                                        : isCurrent
+                                          ? 'bg-emerald-100 border-emerald-300 text-emerald-800 shadow-2xs font-bold'
+                                          : hasInheritedShift
+                                            ? 'bg-slate-100 border-slate-200 text-slate-600'
+                                            : isPendingBaseline
+                                              ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                              : 'bg-slate-100 border-slate-200 text-slate-500'
+                                  }`}>
+                                  {(isCompleted || isStage1)
+                                    ? (isNewDelayFormedAtThisStage
+                                      ? `Completed (+${addedDelayHere}d delay added)`
+                                      : currVariance > 0
+                                        ? (recoveredDelay > 0
+                                          ? `Completed (${recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved, Previous: +${currVariance}d)`
+                                          : `Completed (Previous: +${currVariance}d)`)
+                                        : recoveredDelay > 0
+                                          ? `Completed (${recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved)`
+                                          : 'Completed')
+                                    : isNewDelayFormedAtThisStage
+                                      ? `Delay (+${addedDelayHere}d)`
+                                      : isInProgress
+                                        ? (hasInheritedShift ? `In Execution (Previous: +${currVariance}d)` : 'In Execution')
+                                        : isCurrent
+                                          ? (currVariance > 0 ? `Ready to Start (Previous: +${currVariance}d)` : 'Ready to Start')
+                                          : hasInheritedShift
+                                            ? `Previous (+${currVariance}d)`
+                                            : isPendingBaseline
+                                              ? 'Baseline Pending'
+                                              : 'Not Started'}
+                                </span>
+                              </div>
+
+                              <div className="mt-1.5 space-y-1.5 text-[10px] font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
+                                {ms.key === 'corb_release' ? (
                                   <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-slate-400 font-semibold uppercase">Planned Baseline:</span>{' '}
-                                      <strong className="text-slate-800">{bStart || 'N/A'} &rarr; {bEnd || 'N/A'}</strong>
-                                      <span className="text-slate-500 font-medium">({baselineDuration}d planned)</span>
+                                      <span className="text-slate-400 font-semibold uppercase">Schedule Mode:</span>{' '}
+                                      <strong className="text-cyan-800">Event-Driven (No Planned Baseline Dates)</strong>
                                     </div>
-                                    {shiftDays > 0 ? (
-                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                        {isNewDelayFormedAtThisStage && prevVariance > 0
-                                          ? `+${prevVariance}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay (+${addedDelayHere}d added here)`
-                                          : isNewDelayFormedAtThisStage
-                                          ? `+${addedDelayHere}d delay added at this stage`
-                                          : `+${shiftDays}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay`}
-                                      </span>
-                                    ) : (
-                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                        On original baseline
-                                      </span>
-                                    )}
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                                      Single Completion Input
+                                    </span>
                                   </div>
-
-                                  {/* Revised Target (due to delay) */}
-                                  {shiftDays > 0 && (
-                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60 text-amber-900">
+                                ) : (
+                                  <>
+                                    {/* Planned Baseline row */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600">
                                       <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-amber-700 font-semibold uppercase">Revised (due to delay):</span>{' '}
-                                        <strong className="text-amber-950">{revisedStart} &rarr; {revisedEnd}</strong>
+                                        <span className="text-slate-400 font-semibold uppercase">Planned Baseline:</span>{' '}
+                                        <strong className="text-slate-800">{bStart || 'N/A'} &rarr; {bEnd || 'N/A'}</strong>
+                                        <span className="text-slate-500 font-medium">({baselineDuration}d planned)</span>
                                       </div>
-                                      <span className="text-[9px] text-amber-700 font-medium">
-                                        Target start: {revisedStart} {prevEffectiveEnd ? `(Following Stage ${prevMs?.stageOrder || 'previous'} completion: ${prevEffectiveEnd})` : ''}
-                                      </span>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-
-                              {/* Actual Execution row (if started or completed) */}
-                              {(Boolean(effectiveActualStart) || Boolean(effectiveActualEnd) || isCompleted || isStarted) && (
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 border-t border-slate-200/60 text-slate-700">
-                                  <div>
-                                    <span className="text-slate-400 font-semibold uppercase">Actual Start:</span>{' '}
-                                    <strong className={effectiveActualStart ? "text-blue-700 font-bold" : "text-slate-400"}>
-                                      {effectiveActualStart || 'Pending'}
-                                    </strong>
-                                  </div>
-                                  <div>
-                                    <span className="text-slate-400 font-semibold uppercase">Actual End Date:</span>{' '}
-                                    <strong className={effectiveActualEnd ? "text-emerald-700 font-bold" : "text-slate-400"}>
-                                      {effectiveActualEnd || 'Pending'}
-                                    </strong>
-                                  </div>
-                                  {(isCompleted || isStage1) && effectiveActualEnd && (
-                                    <div className="text-emerald-700 font-semibold flex items-center gap-1">
-                                      ✓ Passed on {effectiveActualEnd}
-                                      {recoveredDelay > 0 && (
-                                        <span className="text-emerald-800 font-bold">
-                                          • {recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved
+                                      {shiftDays > 0 ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                          {isNewDelayFormedAtThisStage && prevVariance > 0
+                                            ? `+${prevVariance}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay (+${addedDelayHere}d added here)`
+                                            : isNewDelayFormedAtThisStage
+                                              ? `+${addedDelayHere}d delay added at this stage`
+                                              : `+${shiftDays}d shift from Stage ${prevMs?.stageOrder || 'previous'} delay`}
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                          On original baseline
                                         </span>
                                       )}
                                     </div>
-                                  )}
+
+                                    {/* Revised Target (due to delay) */}
+                                    {shiftDays > 0 && (
+                                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60 text-amber-900">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-amber-700 font-semibold uppercase">Revised (due to delay):</span>{' '}
+                                          <strong className="text-amber-950">{revisedStart} &rarr; {revisedEnd}</strong>
+                                        </div>
+                                        <span className="text-[9px] text-amber-700 font-medium">
+                                          Target start: {revisedStart} {prevEffectiveEnd ? `(Following Stage ${prevMs?.stageOrder || 'previous'} completion: ${prevEffectiveEnd})` : ''}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+
+                                {/* Actual Execution row (if started or completed) */}
+                                {(Boolean(effectiveActualStart) || Boolean(effectiveActualEnd) || isCompleted || isStarted) && (
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 border-t border-slate-200/60 text-slate-700">
+                                    <div>
+                                      <span className="text-slate-400 font-semibold uppercase">Actual Start:</span>{' '}
+                                      <strong className={effectiveActualStart ? "text-blue-700 font-bold" : "text-slate-400"}>
+                                        {effectiveActualStart || 'Pending'}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-slate-400 font-semibold uppercase">Actual End Date:</span>{' '}
+                                      <strong className={effectiveActualEnd ? "text-emerald-700 font-bold" : "text-slate-400"}>
+                                        {effectiveActualEnd || 'Pending'}
+                                      </strong>
+                                    </div>
+                                    {(isCompleted || isStage1) && effectiveActualEnd && (
+                                      <div className="text-emerald-700 font-semibold flex items-center gap-1">
+                                        ✓ Passed on {effectiveActualEnd}
+                                        {recoveredDelay > 0 && (
+                                          <span className="text-emerald-800 font-bold">
+                                            • {recoveredDelay === 1 ? '1 day' : `${recoveredDelay} days`} delay resolved
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Multi-Product Progress Indicator */}
+                              {po.productLines.length > 1 && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  {productLineMilestones.map(({ line, pIdx, isLineDone, isLineStarted, varianceDays }) => {
+                                    const pPrevMs = index > 0 ? line.milestones[index - 1] : null;
+                                    const pCurrVar = Math.max(0, typeof varianceDays === 'number' ? varianceDays : 0);
+                                    const pPrevVar = pPrevMs ? Math.max(0, typeof pPrevMs.varianceDays === 'number' ? pPrevMs.varianceDays : 0) : 0;
+                                    const pAddedDelay = Math.max(0, pCurrVar - pPrevVar);
+                                    const pHasInherited = pCurrVar > 0 && pAddedDelay === 0;
+
+                                    return (
+                                      <span
+                                        key={line.id}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 border ${isLineDone ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                                            pAddedDelay > 0 ? 'bg-rose-50 text-rose-800 border-rose-300 font-semibold' :
+                                              pHasInherited ? 'bg-slate-100 text-slate-700 border-slate-200' :
+                                                isLineStarted ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                                  'bg-slate-100 text-slate-600 border-slate-200'
+                                          }`}
+                                      >
+                                        <span>#{pIdx + 1} {line.productName}:</span>
+                                        <strong>
+                                          {isLineDone ? 'Done' :
+                                            pAddedDelay > 0 ? `Delay (+${pAddedDelay}d)` :
+                                              pHasInherited ? `Previous (+${pCurrVar}d)` :
+                                                isLineStarted ? 'In Execution' :
+                                                  'Pending'}
+                                        </strong>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Display explicit delay reason on the milestone where delay was entered/occurred */}
+                              {isNewDelayFormedAtThisStage && stageDelayReason && (
+                                <div className="text-[11px] text-rose-700 bg-rose-50 p-2 rounded-lg mt-1.5 border border-rose-100 flex items-center gap-1.5 font-medium">
+                                  <span className="font-bold">Reason {delayedLineWithReason && po.productLines.length > 1 ? `(#${delayedLineWithReason.pIdx + 1}):` : ':'}</span> {stageDelayReason}
                                 </div>
                               )}
                             </div>
 
-                            {/* Multi-Product Progress Indicator */}
-                            {po.productLines.length > 1 && (
-                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                {productLineMilestones.map(({ line, pIdx, isLineDone, isLineStarted, varianceDays }) => {
-                                  const pPrevMs = index > 0 ? line.milestones[index - 1] : null;
-                                  const pCurrVar = Math.max(0, typeof varianceDays === 'number' ? varianceDays : 0);
-                                  const pPrevVar = pPrevMs ? Math.max(0, typeof pPrevMs.varianceDays === 'number' ? pPrevMs.varianceDays : 0) : 0;
-                                  const pAddedDelay = Math.max(0, pCurrVar - pPrevVar);
-                                  const pHasInherited = pCurrVar > 0 && pAddedDelay === 0;
+                            {/* Quick Record Action Buttons - STRICTLY FOR ACTIVE MILESTONE ONLY */}
+                            {!po.isClosed && po.status !== 'Completed' && !isPendingBaseline && !isStage1 && isCurrent && (() => {
+                              const isAuthorizedForMilestone = isMilestoneOwnedByRole(ms.key, activeRole);
+                              if (!isAuthorizedForMilestone) return null;
 
-                                  return (
-                                    <span
-                                      key={line.id}
-                                      className={`px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 border ${
-                                        isLineDone ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                                        pAddedDelay > 0 ? 'bg-rose-50 text-rose-800 border-rose-300 font-semibold' :
-                                        pHasInherited ? 'bg-slate-100 text-slate-700 border-slate-200' :
-                                        isLineStarted ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                                        'bg-slate-100 text-slate-600 border-slate-200'
-                                      }`}
-                                    >
-                                      <span>#{pIdx + 1} {line.productName}:</span>
-                                      <strong>
-                                        {isLineDone ? 'Done' :
-                                         pAddedDelay > 0 ? `Delay (+${pAddedDelay}d)` :
-                                         pHasInherited ? `Previous (+${pCurrVar}d)` :
-                                         isLineStarted ? 'In Execution' :
-                                         'Pending'}
-                                      </strong>
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Display explicit delay reason on the milestone where delay was entered/occurred */}
-                            {isNewDelayFormedAtThisStage && stageDelayReason && (
-                              <div className="text-[11px] text-rose-700 bg-rose-50 p-2 rounded-lg mt-1.5 border border-rose-100 flex items-center gap-1.5 font-medium">
-                                <span className="font-bold">Reason {delayedLineWithReason && po.productLines.length > 1 ? `(#${delayedLineWithReason.pIdx + 1}):` : ':'}</span> {stageDelayReason}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Quick Record Action Buttons - STRICTLY FOR ACTIVE MILESTONE ONLY */}
-                          {!po.isClosed && po.status !== 'Completed' && !isPendingBaseline && !isStage1 && isCurrent && (() => {
-                            const isAuthorizedForMilestone = isMilestoneOwnedByRole(ms.key, activeRole);
-                            if (!isAuthorizedForMilestone) return null;
-
-                            return (
-                              <div className="shrink-0 flex items-center gap-1.5">
-                                {ms.key === 'corb_release' ? (
-                                  <button
-                                    onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
-                                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
-                                    title="Record CORB End Date - Completed"
-                                  >
-                                    <CheckSquare className="w-3 h-3" /> Complete CORB
-                                  </button>
-                                ) : (
-                                  <>
-                                    {!ms.actualStartDate ? (
-                                      <button
-                                        onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
-                                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
-                                      >
-                                        <Play className="w-3 h-3 text-slate-600" /> Record Start
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
-                                        className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer"
-                                        title="Edit / Re-enter Start Date"
-                                      >
-                                        <Edit3 className="w-3 h-3 text-slate-500" /> Edit Start
-                                      </button>
-                                    )}
+                              return (
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  {ms.key === 'corb_release' ? (
                                     <button
                                       onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
                                       className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+                                      title="Record CORB End Date - Completed"
                                     >
-                                      <CheckSquare className="w-3 h-3" /> Mark Complete
+                                      <CheckSquare className="w-3 h-3" /> Complete CORB
                                     </button>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })()}
-                          
-                        </div>
+                                  ) : (
+                                    <>
+                                      {!ms.actualStartDate ? (
+                                        <button
+                                          onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
+                                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Play className="w-3 h-3 text-slate-600" /> Record Start
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => onOpenManualInput(po, selectedLine, ms, 'start')}
+                                          className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer"
+                                          title="Edit / Re-enter Start Date"
+                                        >
+                                          <Edit3 className="w-3 h-3 text-slate-500" /> Edit Start
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => onOpenManualInput(po, selectedLine, ms, 'complete')}
+                                        className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <CheckSquare className="w-3 h-3" /> Mark Complete
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                          </div>
                         </React.Fragment>
                       );
                     })}
@@ -965,9 +951,8 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                                   CRITICAL
                                 </span>
                               )}
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
-                                mat.inspectionResult === 'Passed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'
-                              }`}>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${mat.inspectionResult === 'Passed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+                                }`}>
                                 GRN: {mat.inspectionResult || 'Pending'}
                               </span>
                             </div>

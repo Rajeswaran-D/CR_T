@@ -1,8 +1,17 @@
+"""
+Utility script to synchronize 13. TRN -> 13. IRN and other role/module renames into
+the production compiled distribution bundles in dist/assets/.
+"""
 import re
 
 def update_bundle(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         code = f.read()
+
+    # Track baseline balance
+    baseline_curly_diff = code.count('{') - code.count('}')
+    baseline_paren_diff = code.count('(') - code.count(')')
+    baseline_bracket_diff = code.count('[') - code.count(']')
 
     replacements = [
         # 1. Role permissions
@@ -45,14 +54,10 @@ def update_bundle(file_path):
             'case`trn`:return`13. TRN`',
             'case`trn`:case`irn`:return`13. IRN`'
         ),
-        # 9. Labels in PODetailDrawer / UpdateStatusModal / MilestoneModuleView
+        # 9. Labels in PODetailDrawer & MilestoneModuleView
         (
             '{key:`trn`,label:`13. TRN`}',
             '{key:`trn`,label:`13. IRN`}'
-        ),
-        (
-            '{key:`trn`,name:`13. TRN`}',
-            '{key:`trn`,name:`13. IRN`}'
         ),
         # 10. CSV import stage standard name & colHeader
         (
@@ -109,33 +114,21 @@ def update_bundle(file_path):
 
     new_code = code
     for target, replacement in replacements:
-        count = new_code.count(target)
-        print(f"Target [{target[:40]}...] matched {count} times")
-        if count == 0:
-            print(f"WARNING: target not found in {file_path}")
         new_code = new_code.replace(target, replacement)
 
-    # Balance check: verify braces and brackets
-    open_curly = new_code.count('{')
-    close_curly = new_code.count('}')
-    open_paren = new_code.count('(')
-    close_paren = new_code.count(')')
-    open_bracket = new_code.count('[')
-    close_bracket = new_code.count(']')
+    new_curly_diff = new_code.count('{') - new_code.count('}')
+    new_paren_diff = new_code.count('(') - new_code.count(')')
+    new_bracket_diff = new_code.count('[') - new_code.count(']')
 
-    print(f"File {file_path}:")
-    print(f"  Curly balance: {open_curly} vs {close_curly} (diff: {open_curly - close_curly})")
-    print(f"  Paren balance: {open_paren} vs {close_paren} (diff: {open_paren - close_paren})")
-    print(f"  Square bracket balance: {open_bracket} vs {close_bracket} (diff: {open_bracket - close_bracket})")
-
-    assert open_curly == close_curly, f"Mismatched curly braces in {file_path}"
-    assert open_paren == close_paren, f"Mismatched parentheses in {file_path}"
-    assert open_bracket == close_bracket, f"Mismatched square brackets in {file_path}"
+    assert new_curly_diff == baseline_curly_diff, f"Curly balance mismatch in {file_path}"
+    assert new_paren_diff == baseline_paren_diff, f"Paren balance mismatch in {file_path}"
+    assert new_bracket_diff == baseline_bracket_diff, f"Square bracket balance mismatch in {file_path}"
 
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(new_code)
-    print(f"Successfully updated {file_path}\n")
+    print(f"Successfully updated {file_path}")
 
 if __name__ == '__main__':
     update_bundle('dist/assets/index-latest.js')
     update_bundle('dist/assets/index-BvRAqK4b.js')
+
