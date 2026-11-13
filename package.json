@@ -14,7 +14,6 @@
     "db:check": "python scripts/check_local_db.py",
     "db:data": "python scripts/inspect_db_data.py",
     "test:backend": "python backend/test_api.py",
-    "test:az": "node scripts/test-a-z-connectivity.cjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

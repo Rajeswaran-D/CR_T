@@ -302,7 +302,7 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
   if (!isInitialApproval) {
     po.productLines.forEach(line => {
       line.milestones.forEach(m => {
-        if ((typeof m.varianceDays === 'number' && m.varianceDays > 0) || (m.delayReason && !m.delayReason.startsWith('Cascaded'))) {
+        if (typeof m.varianceDays === 'number' && m.varianceDays > 0 && !m.delayReason?.startsWith('Cascaded')) {
           if (!allPoDelays.some(existing => existing.stageOrder === m.stageOrder && existing.delayReason === m.delayReason)) {
             allPoDelays.push({
               stageOrder: m.stageOrder,
@@ -480,7 +480,7 @@ export const BaselineRevisionModal: React.FC<BaselineRevisionModalProps> = ({
                     <span>Recorded milestone delays across order:</span>
                   </div>
                   {allPoDelays.slice(0, 3).map((d, i) => (
-                    <div key={i} className="truncate">• Stage {d.stageOrder}: {d.stageName.replace(/^\d+\.\s*/, '')}: <strong className="text-rose-700">+{d.varianceDays}d</strong> {d.delayReason ? `("${d.delayReason}")` : ''}</div>
+                    <div key={i} className="truncate">• Stage {d.stageOrder}: {d.stageName.replace(/^\d+\.\s*/, '')}: <strong className="text-rose-700">{d.varianceDays > 0 ? `+${d.varianceDays}` : `${d.varianceDays}`}d</strong> {d.delayReason ? `("${d.delayReason}")` : ''}</div>
                   ))}
                   {allPoDelays.length > 3 && (
                     <div className="text-[9px] text-rose-600 italic">+ {allPoDelays.length - 3} more stage event(s)</div>

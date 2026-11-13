@@ -58,6 +58,7 @@ from .security import (
     validate_order_body, validate_config_body, is_allowed_origin,
     validate_product_body, validate_audit_body, validate_cancellation_body,
     validate_template_body, mask_host, sanitize_text, is_safe_id_string,
+    sanitize_payload, validate_shared_state_keys,
 )
 
 if sys.platform == "win32":
@@ -228,6 +229,10 @@ async def security_middleware(request: Request, call_next):
 
     response: Response = await call_next(request)
 
+    # Information Disclosure Protection: Remove web server signature banners
+    response.headers.pop("server", None)
+    response.headers["Server"] = "Web"
+
     # Comprehensive HTTP Security Headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -235,6 +240,8 @@ async def security_middleware(request: Request, call_next):
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["X-DNS-Prefetch-Control"] = "off"
+    response.headers["X-Download-Options"] = "noopen"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     response.headers["Content-Security-Policy"] = (
@@ -248,7 +255,37 @@ async def security_middleware(request: Request, call_next):
         "base-uri 'self'; "
         "form-action 'self';"
     )
+
+    # Data Theft & Cache Poisoning Protection: Prevent caching of confidential enterprise manufacturing data
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+
     return response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Prevents stack traces and server path leakage on unexpected errors."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    logger.error(f"[Security] Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please contact the administrator."}
+    )
+ 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Prevents stack traces and server path leakage on unexpected errors."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    logger.error(f"[Security] Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please contact the administrator."}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +403,10 @@ async def put_shared_state(
     update = await request.json()
     if not isinstance(update, dict):
         raise HTTPException(status_code=400, detail="Invalid shared state payload")
+    key_err = validate_shared_state_keys(update)
+    if key_err:
+        raise HTTPException(status_code=400, detail=key_err)
+    update = sanitize_payload(update)
 
     synced = await _sync_state_to_mysql(org_id, update)
 
@@ -453,7 +494,7 @@ async def create_order(
     if err:
         raise HTTPException(status_code=400, detail=err)
 
-    new_order = body
+    new_order = sanitize_payload(body)
     untombstone_order(new_order["id"])
 
     synced = False
@@ -482,6 +523,7 @@ async def update_order(
     order_update = await request.json()
     if not isinstance(order_update, dict):
         raise HTTPException(status_code=400, detail="Request body must be a JSON object.")
+    order_update = sanitize_payload(order_update)
 
     conn = await get_connection() if is_db_configured() else None
     if conn:
@@ -629,6 +671,8 @@ async def delete_product(
     x_organization_id: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
 ):
+    if not is_safe_id_string(product_id):
+        raise HTTPException(status_code=400, detail="Invalid product identifier format.")
     org_id = _get_org_id(x_organization_id, authorization)
     mem = get_memory_state()
     mem["cft_products"] = [p for p in (mem.get("cft_products") or []) if p.get("id") != product_id]

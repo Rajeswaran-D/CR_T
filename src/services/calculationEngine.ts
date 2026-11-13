@@ -828,52 +828,27 @@ export function recalculateProductLine(
     const inheritedDelay = prevMs ? Math.max(0, typeof prevMs.varianceDays === 'number' ? prevMs.varianceDays : 0) : 0;
 
     if (isMaterialStage) {
-      const matLeadTime = (criticalMat && typeof criticalMat.leadTimeDays === 'number' && criticalMat.leadTimeDays > 0)
-        ? criticalMat.leadTimeDays
-        : duration;
-      const targetOrderStart = (ms.committedBaselineStartDate && forecastStart > ms.committedBaselineStartDate)
-        ? forecastStart
-        : (ms.committedBaselineStartDate || forecastStart);
-      const targetDelivery = targetOrderStart ? addDays(targetOrderStart, Math.max(0, matLeadTime - 1)) : forecastEnd;
-      const revisedTarget = ms.committedBaselineEndDate
-        ? addDays(ms.committedBaselineEndDate, inheritedDelay)
-        : forecastEnd;
-      const crossingLine = criticalMat?.expectedDate || revisedTarget || targetDelivery || ms.committedBaselineEndDate;
-
       if (ms.actualEndDate) {
-        if (crossingLine && ms.actualEndDate > crossingLine) {
-          const newDelay = getDaysDifference(crossingLine, ms.actualEndDate);
-          varianceDays = inheritedDelay + newDelay;
-        } else if (crossingLine && ms.actualEndDate < crossingLine) {
-          const baselineDiff = ms.committedBaselineEndDate
-            ? getDaysDifference(ms.committedBaselineEndDate, ms.actualEndDate)
-            : 0;
-          const daysEarly = getDaysDifference(ms.actualEndDate, crossingLine);
-          // Recover time from crossing line, but physical variance cannot fall below baseline deviation when late against baseline
-          varianceDays = Math.max(baselineDiff, inheritedDelay - daysEarly);
-        } else {
-          varianceDays = inheritedDelay;
-        }
+        varianceDays = ms.committedBaselineEndDate
+          ? getDaysDifference(ms.committedBaselineEndDate, ms.actualEndDate)
+          : inheritedDelay;
       } else {
-        if (!ms.actualStartDate && !ms.actualEndDate && !hasInPrepSub && !criticalMat?.expectedDate) {
-          varianceDays = inheritedDelay;
-        } else if (forecastEnd && crossingLine && forecastEnd > crossingLine) {
-          const newDelay = getDaysDifference(crossingLine, forecastEnd);
-          varianceDays = inheritedDelay + newDelay;
-        } else {
-          varianceDays = inheritedDelay;
-        }
+        varianceDays = ms.committedBaselineEndDate && forecastEnd
+          ? getDaysDifference(ms.committedBaselineEndDate, forecastEnd)
+          : inheritedDelay;
       }
     } else {
       if (!ms.actualStartDate && !ms.actualEndDate && !hasInPrepSub) {
         // An unstarted milestone inherits schedule variance strictly from its predecessor.
         // It cannot accumulate independent execution delay before work begins.
-        varianceDays = inheritedDelay;
+        varianceDays = ms.committedBaselineEndDate && forecastEnd
+          ? getDaysDifference(ms.committedBaselineEndDate, forecastEnd)
+          : inheritedDelay;
       } else {
         // For active or completed milestones, variance is measured against the committed baseline end date
-        varianceDays = effEnd > ms.committedBaselineEndDate
-          ? Math.max(1, getDaysDifference(ms.committedBaselineEndDate, effEnd))
-          : getDaysDifference(ms.committedBaselineEndDate, effEnd);
+        varianceDays = ms.committedBaselineEndDate
+          ? getDaysDifference(ms.committedBaselineEndDate, effEnd)
+          : inheritedDelay;
       }
     }
 

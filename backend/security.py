@@ -180,25 +180,73 @@ DANGEROUS_HTML_PATTERN = re.compile(
     r"(?i)<\s*(script|iframe|embed|object|meta|link|style)[^>]*>|javascript:|data:text/html|on\w+\s*=",
     re.IGNORECASE
 )
+PATH_TRAVERSAL_PATTERN = re.compile(r"(\.\./|\.\.\\|/\.\.|\\\.\.|^[\/\\])")
+PROTOTYPE_POLLUTION_KEYS = frozenset({"__proto__", "constructor", "prototype"})
+
+ALLOWED_SHARED_STATE_KEYS = frozenset({
+    "cft_pos", "cft_products", "cft_audit", "cft_rectifications",
+    "cft_config", "cft_cancellations", "cft_templates", "cft_users",
+    "cft_offline_queue"
+})
 
 
 def is_safe_id_string(value: object, max_len: int = 128) -> bool:
     return (
         isinstance(value, str)
-        and value.strip()
+        and bool(value.strip())
         and len(value) <= max_len
+        and value not in ("..", ".", "/", "\\")
+        and not PATH_TRAVERSAL_PATTERN.search(value)
         and not CONTROL_CHARS.search(value)
         and not DANGEROUS_HTML_PATTERN.search(value)
     )
 
 
-def sanitize_text(val: object, max_len: int = 2000) -> str:
+def sanitize_text(val: object, max_len: int = 5000) -> str:
     """Strips control chars and dangerous executable tags from user text."""
     if not isinstance(val, str):
         return ""
     clean = CONTROL_CHARS.sub("", val)
     clean = DANGEROUS_HTML_PATTERN.sub("", clean)
     return clean[:max_len].strip()
+
+
+def sanitize_payload(obj: object, depth: int = 0, max_depth: int = 12) -> object:
+    """
+    Recursively cleans payload structures:
+    1. Blocks prototype pollution / object injection keys.
+    2. Strips malicious control characters and executable script/HTML payloads from strings.
+    3. Enforces depth and collection length limits to defend against DoS / memory bombs.
+    """
+    if depth > max_depth:
+        return None
+    if isinstance(obj, dict):
+        cleaned: dict = {}
+        for k, v in obj.items():
+            if not isinstance(k, str) or k in PROTOTYPE_POLLUTION_KEYS:
+                continue
+            clean_k = CONTROL_CHARS.sub("", k)[:128]
+            cleaned[clean_k] = sanitize_payload(v, depth + 1, max_depth)
+        return cleaned
+    elif isinstance(obj, list):
+        if len(obj) > 10_000:
+            obj = obj[:10_000]
+        return [sanitize_payload(item, depth + 1, max_depth) for item in obj]
+    elif isinstance(obj, str):
+        return sanitize_text(obj, max_len=5000)
+    elif isinstance(obj, (int, float, bool)) or obj is None:
+        return obj
+    return None
+
+
+def validate_shared_state_keys(body: dict) -> Optional[str]:
+    """Ensures PUT /api/shared-state cannot inject unrecognized keys or pollute server state."""
+    if not isinstance(body, dict):
+        return "Shared state payload must be a JSON object."
+    for k in body.keys():
+        if k in PROTOTYPE_POLLUTION_KEYS or k not in ALLOWED_SHARED_STATE_KEYS:
+            return f"Invalid or disallowed state key: {k}."
+    return None
 
 
 def validate_order_body(body: dict) -> Optional[str]:

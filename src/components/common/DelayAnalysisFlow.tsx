@@ -525,7 +525,7 @@ export const DelayAnalysisFlow: React.FC<DelayAnalysisFlowProps> = ({
           <div className="text-right px-3 py-1.5 rounded-lg bg-white/10 border border-white/10">
             <div className="text-[10px] uppercase font-mono text-slate-400">Target Delivery Date</div>
             <div className={`text-xs font-bold font-mono ${isResolvedState ? 'text-emerald-300' : 'text-rose-300'}`}>
-              {po.revisedDeliveryDate || po.committedDeliveryDate}
+              {displayRevisedDelivery}
             </div>
           </div>
         </div>
