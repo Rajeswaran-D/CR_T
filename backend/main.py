@@ -91,7 +91,7 @@ _start_time = time.time()
 # Shared state cache (per org, 1 second TTL)
 # ---------------------------------------------------------------------------
 _state_cache: dict[str, dict] = {}
-CACHE_TTL_SECS = 1.0
+CACHE_TTL_SECS = 0.2
 
 
 def _invalidate_cache(org_id: str) -> None:
@@ -394,7 +394,15 @@ async def get_shared_state(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     state = await _load_shared_state_snapshot(org_id)
-    return JSONResponse(content=state, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "X-Served-By": "cft-production-engine"})
+    return JSONResponse(
+        content=state,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Served-By": "cft-production-engine",
+        },
+    )
 
 
 @app.put("/api/shared-state", status_code=204)

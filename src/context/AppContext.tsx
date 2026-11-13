@@ -965,7 +965,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Keep every open tab synchronized with the shared local-storage state.
   useEffect(() => {
-    const SYNC_INTERVAL_MS = 10_000;
+    const SYNC_INTERVAL_MS = 2_000;
     let syncRequestInFlight = false;
 
     const applyStoredState = (key: string, value: string | null) => {
@@ -1175,36 +1175,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Save changes to localStorage
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_pos', purchaseOrders);
-  }, [purchaseOrders, sharedStateReady]);
-
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_products', products);
-  }, [products, sharedStateReady]);
-
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_templates', templates);
-  }, [templates, sharedStateReady]);
-
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_rectifications', rectifications);
-  }, [rectifications, sharedStateReady]);
-
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_audit', auditLog);
-  }, [auditLog, sharedStateReady]);
-
-  useEffect(() => {
-    if (!sharedStateReady) return;
-    persistState('cft_config', config);
-  }, [config, sharedStateReady]);
 
 
   const addAudit = (user: string, role: Role, poNumber: string, action: string, docRef: string, details: string, productLine?: string, backdateReason?: string) => {
@@ -3159,7 +3129,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
       updatedAt: now
     };
-    setPurchaseOrders(prev => prev.map(po => {
+    const updated = purchaseOrders.map(po => {
       if (po.id !== params.poId) return po;
       return withRefreshedStatus(po, po.productLines.map(line => {
         if (line.id !== params.productLineId) return line;
@@ -3175,7 +3145,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           )
         }, today, atRiskThresholdDays, delayedThresholdDays);
       }));
-    }));
+    });
+    setPurchaseOrders(updated);
+    persistState('cft_pos', updated);
     return { success: true };
   };
 
@@ -3189,7 +3161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Unauthorized: You do not have permission to manage subdivisions for this milestone.' };
     }
     const now = new Date().toISOString();
-    setPurchaseOrders(prev => prev.map(po => {
+    const updated = purchaseOrders.map(po => {
       if (po.id !== params.poId) return po;
       return withRefreshedStatus(po, po.productLines.map(line => {
         if (line.id !== params.productLineId) return line;
@@ -3207,7 +3179,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         return recalculateProductLine(updatedLine, today, atRiskThresholdDays, delayedThresholdDays);
       }));
-    }));
+    });
+    setPurchaseOrders(updated);
+    persistState('cft_pos', updated);
     return { success: true };
   };
 
@@ -3218,7 +3192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (targetMs && !canRoleManageSubdivision(activeRole, activeRole, targetMs.key)) {
       return { success: false, error: 'Unauthorized: You do not have permission to manage subdivisions for this milestone.' };
     }
-    setPurchaseOrders(prev => prev.map(po => {
+    const updated = purchaseOrders.map(po => {
       if (po.id !== params.poId) return po;
       return withRefreshedStatus(po, po.productLines.map(line => {
         if (line.id !== params.productLineId) return line;
@@ -3235,7 +3209,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
         }, today, atRiskThresholdDays, delayedThresholdDays);
       }));
-    }));
+    });
+    setPurchaseOrders(updated);
+    persistState('cft_pos', updated);
     return { success: true };
   };
 
