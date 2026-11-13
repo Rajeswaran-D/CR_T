@@ -127,7 +127,9 @@ def run_all():
     test_prod = {
         "id": test_prod_id,
         "code": "PROD-PY-01",
+        "productCode": "PROD-PY-01",
         "name": "FastAPI High Pressure Valve",
+        "productName": "FastAPI High Pressure Valve",
         "category": "Valves",
         "description": "Engineered Valve",
         "leadTimeDays": 30,
@@ -142,7 +144,13 @@ def run_all():
 
     def test_get_products():
         status, data = request("GET", "/products")
-        return status == 200 and isinstance(data, list) and any(p.get("id") == test_prod_id for p in data)
+        found = status == 200 and isinstance(data, list) and any(p.get("id") == test_prod_id for p in data)
+        # Clean up test product via shared-state so it never pollutes the catalog
+        s_status, s_data = request("GET", "/shared-state")
+        if s_status == 200 and isinstance(s_data, dict):
+            s_data["cft_products"] = [p for p in s_data.get("cft_products", []) if p.get("id") != test_prod_id]
+            request("PUT", "/shared-state", body=s_data)
+        return found
     results.append(test("GET /api/products returns products", test_get_products))
 
     def test_get_templates():

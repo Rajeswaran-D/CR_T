@@ -586,6 +586,16 @@ async def create_product(
 ):
     org_id = _get_org_id(x_organization_id, authorization)
     prod = await request.json()
+    # Normalize product fields for frontend and DB compatibility
+    if not prod.get("productName") and prod.get("name"):
+        prod["productName"] = prod["name"]
+    if not prod.get("productCode") and prod.get("code"):
+        prod["productCode"] = prod["code"]
+    if not prod.get("name") and prod.get("productName"):
+        prod["name"] = prod["productName"]
+    if not prod.get("code") and prod.get("productCode"):
+        prod["code"] = prod["productCode"]
+
     validated, err = validate_product_body(prod)
     if err:
         raise HTTPException(status_code=400, detail=err)
@@ -611,6 +621,20 @@ async def create_product(
     schedule_state_save()
     _invalidate_cache(org_id)
     return JSONResponse(content=prod, status_code=201)
+
+
+@app.delete("/api/products/{product_id}", status_code=204)
+async def delete_product(
+    product_id: str,
+    x_organization_id: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+):
+    org_id = _get_org_id(x_organization_id, authorization)
+    mem = get_memory_state()
+    mem["cft_products"] = [p for p in (mem.get("cft_products") or []) if p.get("id") != product_id]
+    schedule_state_save()
+    _invalidate_cache(org_id)
+    return Response(status_code=204)
 
 
 # ===========================================================================

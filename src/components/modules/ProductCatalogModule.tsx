@@ -135,10 +135,14 @@ export const ProductCatalogModule: React.FC = () => {
   };
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.productName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (p.defaultMaterials && p.defaultMaterials.some(m => m.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) || m.description.toLowerCase().includes(searchTerm.toLowerCase())));
+    const pName = (p.productName || (p as any).name || '').toLowerCase();
+    const pCode = (p.productCode || (p as any).code || '').toLowerCase();
+    const pDesc = (p.description || '').toLowerCase();
+    const search = (searchTerm || '').toLowerCase();
+    const matchesSearch = pName.includes(search) || 
+                          pCode.includes(search) ||
+                          pDesc.includes(search) ||
+                          (p.defaultMaterials && p.defaultMaterials.some(m => (m.itemCode || '').toLowerCase().includes(search) || (m.description || '').toLowerCase().includes(search)));
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
   });
