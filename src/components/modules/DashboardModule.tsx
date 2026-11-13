@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { PurchaseOrder } from '../../types';
 import { getPOManufacturingStatus } from '../../utils/statusUtils';
+import { addDays } from '../../services/calculationEngine';
 import { BaselineRevisionModal } from '../modals/BaselineRevisionModal';
 import { BulkImportModal } from '../modals/BulkImportModal';
 
@@ -470,7 +471,9 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
                 displayedOrders.map((po) => {
                   const firstLine = po.productLines[0];
                   const statusSummary = getPOManufacturingStatus(po);
-                  const deadline = po.revisedDeliveryDate || po.committedDeliveryDate;
+                  const deadline = (statusSummary.isDelayed && statusSummary.delayDays > 0 && po.committedDeliveryDate)
+                    ? addDays(po.committedDeliveryDate, statusSummary.delayDays)
+                    : (po.revisedDeliveryDate || po.committedDeliveryDate);
                   const hasPendingCancel = po.cancellationRequest?.status === 'Pending';
 
                   return (

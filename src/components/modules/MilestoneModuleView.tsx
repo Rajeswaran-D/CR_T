@@ -504,7 +504,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
       ? sampleMat.leadTimeDays
       : (sampleMs?.committedDurationDays || sampleMs?.defaultDurationDays || 14);
     const defOrder = sampleMat?.orderedDate || (mode === 'start' ? defaultBatchDate : (sampleMs?.actualStartDate || defaultBatchDate));
-    const defExpected = sampleMat?.expectedDate || addDays(defOrder, matDuration);
+    const defExpected = sampleMat?.expectedDate || addDays(defOrder, Math.max(0, matDuration - 1));
     const defReceived = (mode === 'complete')
       ? (sampleMat?.receivedDate || defaultBatchDate)
       : (sampleMat?.receivedDate || '');
@@ -1415,7 +1415,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                                   ...prev,
                                                   orderedDate: orderDate,
                                                   startDate: orderDate,
-                                                  expectedDate: addDays(orderDate, lead)
+                                                  expectedDate: addDays(orderDate, Math.max(0, lead - 1))
                                                 }));
                                               }}
                                               className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
@@ -1432,7 +1432,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                               const minD = stageOrder > 1 ? (prevMilestone?.actualEndDate || prevMilestone?.forecastEndDate) : null;
                                               const newOrder = (minD && val && val < minD) ? minD : val;
                                               const lead = line.materials?.[0]?.leadTimeDays || 14;
-                                              const newExp = newOrder ? addDays(newOrder, lead) : formData.expectedDate;
+                                              const newExp = newOrder ? addDays(newOrder, Math.max(0, lead - 1)) : formData.expectedDate;
                                               setFormData(prev => ({
                                                 ...prev,
                                                 orderedDate: newOrder,
@@ -2025,7 +2025,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                 : (activeMs?.committedDurationDays || activeMs?.defaultDurationDays || 14);
 
                               const orderBase = batchModal.orderedDate || batchModal.date;
-                              const newExpected = (orderBase && activeLead) ? addDays(orderBase, activeLead) : batchModal.expectedDate;
+                              const newExpected = (orderBase && activeLead) ? addDays(orderBase, Math.max(0, activeLead - 1)) : batchModal.expectedDate;
 
                               setBatchModal(prev => ({
                                 ...prev,
@@ -2147,7 +2147,7 @@ export const MilestoneModuleView: React.FC<MilestoneModuleViewProps> = ({
                                 const val = e.target.value;
                                 const minFloor = authoritativePrevEnd || samplePrevEnd || selectedMs?.committedBaselineStartDate;
                                 const enforcedVal = (minFloor && val && val < minFloor) ? minFloor : val;
-                                const newExp = enforcedVal ? addDays(enforcedVal, selectedLeadTime) : batchModal.expectedDate;
+                                const newExp = enforcedVal ? addDays(enforcedVal, Math.max(0, selectedLeadTime - 1)) : batchModal.expectedDate;
                                 setBatchModal(prev => ({
                                   ...prev,
                                   orderedDate: enforcedVal,

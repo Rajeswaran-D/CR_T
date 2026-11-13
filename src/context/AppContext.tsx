@@ -707,13 +707,18 @@ const normalizeMilestoneFlows = (orders: PurchaseOrder[], todayStr: string): Pur
     }))
     : recalculatedLines;
 
+  const maxLineVar = Math.max(...productLines.map(l => l.overallVarianceDays || 0), 0);
+  const calculatedCleanRevised = (maxLineVar > 0 && cleanCommittedDate)
+    ? addDays(cleanCommittedDate, maxLineVar)
+    : ((maxFinalForecast && maxFinalForecast > cleanCommittedDate) ? maxFinalForecast : cleanRevisedDate);
+
   return {
     ...po,
     poDate: cleanPoDate,
     committedDeliveryDate: cleanCommittedDate,
     revisedDeliveryDate: stillPendingBaseline
       ? cleanCommittedDate
-      : ((maxFinalForecast && maxFinalForecast > cleanCommittedDate) ? maxFinalForecast : cleanRevisedDate),
+      : calculatedCleanRevised,
     productLines,
     status: po.isCancelled || po.status === 'Cancelled'
       ? 'Cancelled'
@@ -1654,10 +1659,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, '');
 
       const refreshed = withRefreshedStatus(p, updatedLines);
+      const maxOverallVariance = Math.max(...updatedLines.map(l => l.overallVarianceDays || 0), 0);
+      const calculatedRevisedDelivery = (maxOverallVariance > 0 && p.committedDeliveryDate)
+        ? addDays(p.committedDeliveryDate, maxOverallVariance)
+        : ((maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate);
 
       return {
         ...refreshed,
-        revisedDeliveryDate: (maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate,
+        revisedDeliveryDate: calculatedRevisedDelivery,
         lastUpdatedBy: itemsForPO[0]?.user || activeRole,
         lastUpdatedAt: new Date().toISOString()
       };
@@ -1912,9 +1921,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, '');
 
       const refreshed = withRefreshedStatus(p, updatedLines);
+      const maxOverallVariance = Math.max(...updatedLines.map(l => l.overallVarianceDays || 0), 0);
+      const calculatedRevisedDelivery = (maxOverallVariance > 0 && p.committedDeliveryDate)
+        ? addDays(p.committedDeliveryDate, maxOverallVariance)
+        : ((maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate);
+
       return {
         ...refreshed,
-        revisedDeliveryDate: (maxFinalForecast && maxFinalForecast > p.committedDeliveryDate) ? maxFinalForecast : p.committedDeliveryDate,
+        revisedDeliveryDate: calculatedRevisedDelivery,
         lastUpdatedBy: user,
         lastUpdatedAt: new Date().toISOString()
       };
@@ -2358,9 +2372,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .slice(-1)[0];
 
       const finalBaselineDelivery = recalculatedDeliveryDate || p.committedDeliveryDate;
-      const finalRevisedDelivery = (maxFinalForecast && maxFinalForecast > finalBaselineDelivery)
-        ? maxFinalForecast
-        : finalBaselineDelivery;
+      const maxOverallVariance = Math.max(...updatedLines.map(l => l.overallVarianceDays || 0), 0);
+      const finalRevisedDelivery = (maxOverallVariance > 0 && finalBaselineDelivery)
+        ? addDays(finalBaselineDelivery, maxOverallVariance)
+        : ((maxFinalForecast && maxFinalForecast > finalBaselineDelivery) ? maxFinalForecast : finalBaselineDelivery);
 
       const finalLines = updatedLines.map(line => ({
         ...line,

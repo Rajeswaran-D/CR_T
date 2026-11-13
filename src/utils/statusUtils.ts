@@ -123,7 +123,12 @@ export function getPOManufacturingStatus(po: PurchaseOrder): POStatusSummary {
     ? getDaysDifference(po.committedDeliveryDate, po.actualDeliveryDate)
     : 0;
 
-  const totalCalculatedDelay = Math.max(0, maxPOVariance, ...lineDelays, poDateDiff, actualDeliveryDiff);
+  // Milestone schedule variance is the authoritative source of truth for manufacturing delays.
+  // poDateDiff from calendar cascading must not artificially inflate the delay beyond actual milestone variance.
+  const milestoneDelay = Math.max(0, maxPOVariance, ...lineDelays);
+  const totalCalculatedDelay = milestoneDelay > 0
+    ? milestoneDelay
+    : Math.max(0, poDateDiff, actualDeliveryDiff);
 
   // Find all stages that actually introduced a delay (stageDelta > 0 or explicit delay reason with positive variance)
   const delayOriginEntries: Array<{
