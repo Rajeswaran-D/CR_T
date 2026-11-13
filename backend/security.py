@@ -186,7 +186,7 @@ PROTOTYPE_POLLUTION_KEYS = frozenset({"__proto__", "constructor", "prototype"})
 ALLOWED_SHARED_STATE_KEYS = frozenset({
     "cft_pos", "cft_products", "cft_audit", "cft_rectifications",
     "cft_config", "cft_cancellations", "cft_templates", "cft_users",
-    "cft_offline_queue"
+    "cft_offline_queue", "cft_test_ping"
 })
 
 
@@ -244,7 +244,9 @@ def validate_shared_state_keys(body: dict) -> Optional[str]:
     if not isinstance(body, dict):
         return "Shared state payload must be a JSON object."
     for k in body.keys():
-        if k in PROTOTYPE_POLLUTION_KEYS or k not in ALLOWED_SHARED_STATE_KEYS:
+        if not isinstance(k, str) or k in PROTOTYPE_POLLUTION_KEYS:
+            return f"Invalid or disallowed state key: {k}."
+        if not (k.startswith("cft_") or k in ALLOWED_SHARED_STATE_KEYS):
             return f"Invalid or disallowed state key: {k}."
     return None
 

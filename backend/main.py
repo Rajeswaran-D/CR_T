@@ -229,8 +229,12 @@ async def security_middleware(request: Request, call_next):
 
     response: Response = await call_next(request)
 
-    # Information Disclosure Protection: Remove web server signature banners
-    response.headers.pop("server", None)
+    # Information Disclosure Protection: Override web server signature banners
+    if "server" in response.headers:
+        try:
+            del response.headers["server"]
+        except Exception:
+            pass
     response.headers["Server"] = "Web"
 
     # Comprehensive HTTP Security Headers
