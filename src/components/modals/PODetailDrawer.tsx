@@ -183,7 +183,7 @@ export const PODetailDrawer: React.FC<PODetailDrawerProps> = ({
                 </button>
               )}
 
-              {onOpenCancelModal && !po.isClosed && po.status !== 'Cancelled' && (
+              {onOpenCancelModal && !po.isClosed && po.status !== 'Cancelled' && activeRole !== 'Viewer' && (
                 <button
                   onClick={() => onOpenCancelModal(po)}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${hasPendingCancel

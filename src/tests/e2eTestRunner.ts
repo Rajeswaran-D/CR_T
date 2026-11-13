@@ -410,6 +410,7 @@ assert(!isAuthorizedRole('Stores (Shipment)'), 'Stores (Shipment) role is strict
 assert(!isAuthorizedRole('Sales / AE (Customer PO)'), 'Sales / AE role is strictly blocked from closing orders');
 assert(!isAuthorizedRole('QC (IRN)'), 'QC (IRN) role is strictly blocked from closing orders');
 assert(!isAuthorizedRole('QC (TRN)'), 'QC (TRN) role is strictly blocked from closing orders');
+assert(!isAuthorizedRole('Viewer'), 'Viewer role is strictly blocked from closing orders');
 assert(isAuthorizedRole('Project Manager (PM Baseline)'), 'Project Manager (PM Baseline) is authorized to formally close orders');
 assert(isAuthorizedRole('Project Management'), 'Project Management (Admin) is authorized to formally close orders');
 

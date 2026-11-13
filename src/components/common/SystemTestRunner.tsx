@@ -154,7 +154,7 @@ export const SystemTestRunner: React.FC<SystemTestRunnerProps> = ({ isOpen, onCl
       // ── T-08: Each slot owns its designated milestone(s) ─────────────────
       const t8s = performance.now();
       const slotRoles = Object.entries(ROLE_PERMISSIONS).filter(
-        ([role, perms]) => role !== 'Project Management' && Array.isArray(perms.allowedMilestones)
+        ([role, perms]) => role !== 'Project Management' && role !== 'Viewer' && Array.isArray(perms.allowedMilestones)
       );
       const exactlyOne = slotRoles.every(([role, p]) => {
         if (!Array.isArray(p.allowedMilestones)) return false;

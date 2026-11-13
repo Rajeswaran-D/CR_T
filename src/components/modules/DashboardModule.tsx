@@ -606,7 +606,7 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
                             </button>
                           )}
 
-                          {onOpenCancelModal && !po.isClosed && (
+                          {onOpenCancelModal && !po.isClosed && activeRole !== 'Viewer' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

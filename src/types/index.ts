@@ -1,4 +1,5 @@
 export type Role =
+  | 'Viewer'
   | 'Project Management'
   | 'Sales / AE (Customer PO)'
   | 'AE (CORB Release)'
@@ -206,7 +207,8 @@ export const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
   'QC (Painting)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['painting'] },
   'QC (IRN)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['trn'] },
   'QC (TRN)': { ...defaultSlotPerms, canEditProduction: true, allowedMilestones: ['trn'] },
-  'Stores (Shipment)': { ...defaultSlotPerms, canEditDispatch: true, allowedMilestones: ['shipment', 'dispatch', 'delivery'] }
+  'Stores (Shipment)': { ...defaultSlotPerms, canEditDispatch: true, allowedMilestones: ['shipment', 'dispatch', 'delivery'] },
+  'Viewer': { ...defaultSlotPerms, allowedMilestones: [] }
 };
 
 export function isMilestoneOwnedByRole(milestoneKey: string, role: Role): boolean {

@@ -37,6 +37,9 @@ const MainAppContent: React.FC = () => {
   const prevRoleRef = useRef<Role>(activeRole);
 
   const handleSelectModule = (mod: ModuleType) => {
+    if (activeRole === 'Viewer' && mod !== 'Dashboard') {
+      mod = 'Dashboard';
+    }
     setActiveModule(mod);
     try {
       sessionStorage.setItem('cft_active_module', mod);
@@ -45,12 +48,19 @@ const MainAppContent: React.FC = () => {
   };
 
   React.useEffect(() => {
+    if (activeRole === 'Viewer') {
+      if (activeModule !== 'Dashboard') {
+        handleSelectModule('Dashboard');
+      }
+      return;
+    }
     // Only auto-switch module if user explicitly changed their active role
     if (prevRoleRef.current !== activeRole) {
       prevRoleRef.current = activeRole;
       if (activeModule === 'Dashboard') return;
 
       const ROLE_MODULE_MAP: Record<Role, ModuleType> = {
+        'Viewer':                       'Dashboard',
         'Sales / AE (Customer PO)':     '1. Customer Purchase Order (PO)',
         'AE (CORB Release)':            '2. CORB Release',
         'Project Manager (PM Baseline)':'3. Baseline Review & Planning',

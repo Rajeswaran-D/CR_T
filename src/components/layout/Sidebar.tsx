@@ -41,6 +41,7 @@ interface SidebarProps {
 }
 
 const ALL_ROLES: Role[] = [
+  'Viewer',
   'Project Management',
   'Sales / AE (Customer PO)',
   'AE (CORB Release)',
@@ -60,6 +61,7 @@ const ALL_ROLES: Role[] = [
 
 // Role → badge color classes
 const ROLE_BADGE: Record<Role, string> = {
+  'Viewer': 'bg-slate-100 text-slate-700 border-slate-300',
   'Project Management': 'bg-emerald-100 text-emerald-800 border-emerald-300',
   'Sales / AE (Customer PO)': 'bg-blue-100 text-blue-800 border-blue-300',
   'AE (CORB Release)': 'bg-teal-100 text-teal-800 border-teal-300',
@@ -79,6 +81,7 @@ const ROLE_BADGE: Record<Role, string> = {
 };
 
 const ROLE_RESPONSIBLE_MODULE: Record<Role, ModuleType> = {
+  'Viewer': 'Dashboard',
   'Project Management': 'Administration & Governance',
   'Sales / AE (Customer PO)': '1. Customer Purchase Order (PO)',
   'AE (CORB Release)': '2. CORB Release',
@@ -133,6 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const allowedModule = ROLE_RESPONSIBLE_MODULE[activeRole];
 
   const navItems = allNavItems.filter((item) => {
+    if (activeRole === 'Viewer') return item.name === 'Dashboard';
     if (item.name === 'Dashboard') return true;
     if (activeRole === 'Project Management') return true;
     return item.name === allowedModule;
